@@ -160,7 +160,7 @@ function addStudent() {
         serial: students.length + 1,
         id: id,
         name: name,
-        dept: currentUser.dept,
+        dept: currentUser.department,
         year: currentUser.year
 
     });
@@ -448,4 +448,5 @@ window.onload = function () {
     }
 
 };
+
 
