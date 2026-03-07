@@ -74,6 +74,8 @@ LOAD USER INFO
 
 function loadUser() {
 
+    currentUser = JSON.parse(localStorage.getItem("currentUser"));
+
     if (!currentUser) {
         window.location.href = "index.html";
         return;
@@ -82,9 +84,7 @@ function loadUser() {
     let userInfo = document.getElementById("userInfo");
 
     if (userInfo) {
-
         userInfo.innerText = currentUser.dept + " - " + currentUser.year + " Year";
-
     }
 
 }
@@ -97,7 +97,6 @@ LOGOUT
 function logout() {
 
     localStorage.removeItem("currentUser");
-
     window.location.href = "index.html";
 
 }
@@ -201,9 +200,7 @@ function clearStudents() {
     if (!confirm("Delete all students?")) return;
 
     students = students.filter(s =>
-
         !(s.dept === currentUser.dept && s.year === currentUser.year)
-
     );
 
     saveData();
@@ -228,9 +225,7 @@ function renderAttendance() {
     if (!date) {
 
         let today = new Date().toISOString().split("T")[0];
-
         dateInput.value = today;
-
         date = today;
 
     }
@@ -242,18 +237,14 @@ function renderAttendance() {
     body.innerHTML = "";
 
     let filtered = students.filter(s =>
-
         s.dept === currentUser.dept &&
         s.year === currentUser.year
-
     );
 
     filtered.forEach(s => {
 
         let absent = attendance.find(a =>
-
             a.id === s.id && a.date === date
-
         );
 
         body.innerHTML += `
@@ -261,9 +252,7 @@ function renderAttendance() {
 <tr>
 
 <td>${s.serial}</td>
-
 <td>${s.id}</td>
-
 <td>${s.name}</td>
 
 <td>
@@ -300,15 +289,11 @@ MARK ATTENDANCE
 function markAttendance(id, date, status) {
 
     attendance = attendance.filter(a =>
-
         !(a.id === id && a.date === date)
-
     );
 
     if (status === "absent") {
-
         attendance.push({ id, date });
-
     }
 
     saveData();
@@ -328,21 +313,17 @@ function generateReport() {
     if (!from || !to) {
 
         alert("Select dates");
-
         return;
 
     }
 
     let body = document.getElementById("reportBody");
-
     body.innerHTML = "";
 
     let days = new Set(
-
         attendance
             .filter(a => a.date >= from && a.date <= to)
             .map(a => a.date)
-
     );
 
     let total = days.size;
@@ -352,11 +333,9 @@ function generateReport() {
         .forEach(s => {
 
             let absent = attendance.filter(a =>
-
                 a.id === s.id &&
                 a.date >= from &&
                 a.date <= to
-
             ).length;
 
             let present = total - absent;
@@ -370,17 +349,11 @@ function generateReport() {
 <tr>
 
 <td>${s.serial}</td>
-
 <td>${s.id}</td>
-
 <td>${s.name}</td>
-
 <td>${total}</td>
-
 <td>${present}</td>
-
 <td>${absent}</td>
-
 <td>${percent}%</td>
 
 </tr>
@@ -400,6 +373,11 @@ function downloadReport() {
 
     let table = document.querySelector("table");
 
+    if (!table) {
+        alert("No table found");
+        return;
+    }
+
     let wb = XLSX.utils.table_to_book(table, { sheet: "Report" });
 
     XLSX.writeFile(wb, "Attendance_Report.xlsx");
@@ -413,8 +391,11 @@ AUTO LOAD
 
 window.onload = function () {
 
-    loadUser();
+    if (localStorage.getItem("currentUser")) {
 
-    renderAttendance();
+        loadUser();
+        renderAttendance();
+
+    }
 
 };
