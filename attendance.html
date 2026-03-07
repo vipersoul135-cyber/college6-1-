@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <meta charset="UTF-8">
+    <title>Attendance</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h3 class="center">Attendance</h3>
+
+        <div class="center">
+
+            <input type="date" id="attendanceDate" onchange="renderAttendance()">
+
+        </div>
+
+        <table>
+
+            <thead>
+                <tr>
+
+                    <th>Serial</th>
+                    <th>Register No</th>
+                    <th>Name</th>
+                    <th>Status</th>
+
+                </tr>
+            </thead>
+
+            <tbody id="attendanceBody"></tbody>
+
+        </table>
+
+        <div class="center">
+
+            <button onclick="location.href='home.html'">Back</button>
+
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>

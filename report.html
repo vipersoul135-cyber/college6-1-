@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <meta charset="UTF-8">
+    <title>Report</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h3>Attendance Report</h3>
+
+        From <input type="date" id="fromDate">
+        To <input type="date" id="toDate">
+
+        <button onclick="generateReport()">Generate</button>
+
+        <button class="green" onclick="downloadReport()">Download Excel</button>
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Serial</th>
+                    <th>Register No</th>
+                    <th>Name</th>
+                    <th>Total Days</th>
+                    <th>Present</th>
+                    <th>Absent</th>
+                    <th>%</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="reportBody"></tbody>
+
+        </table>
+
+        <br>
+
+        <button onclick="location.href='home.html'">Back</button>
+
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>

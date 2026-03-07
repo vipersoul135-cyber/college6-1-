@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <meta charset="UTF-8">
+    <title>Register Student</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+    <div class="container center">
+
+        <h3>Register Student</h3>
+
+        <input id="studentName" placeholder="Student Name">
+        <input id="studentID" placeholder="Register Number">
+
+        <button onclick="addStudent()">Add</button>
+
+        <hr>
+
+        <h4>Upload Excel</h4>
+
+        <input type="file" id="excelFile" accept=".xlsx,.xls">
+
+        <button onclick="uploadExcel()">Upload</button>
+
+        <br><br>
+
+        <button class="red" onclick="clearStudents()">Delete Students</button>
+
+        <br><br>
+
+        <button onclick="location.href='home.html'">Back</button>
+
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>
