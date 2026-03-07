@@ -50,7 +50,7 @@ async function login() {
 
     try {
 
-        const response = await fetch("/api/login", {
+        const response = await fetch("https://attendancesystem-ln29.onrender.com/api/auth/login", {
 
             method: "POST",
 
@@ -448,3 +448,4 @@ window.onload = function () {
     }
 
 };
+
