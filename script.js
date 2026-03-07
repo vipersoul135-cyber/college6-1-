@@ -33,37 +33,66 @@ function saveData() {
 
 
 /* =========================
-LOGIN
+LOGIN (POST METHOD BACKEND)
 ========================= */
 
-function login() {
+async function login() {
 
-    let u = document.getElementById("loginUser").value.trim().toLowerCase();
-    let p = document.getElementById("loginPass").value.trim();
+    let username = document.getElementById("loginUser").value.trim();
+    let password = document.getElementById("loginPass").value.trim();
 
-    if (p !== "123") {
-        document.getElementById("loginMsg").innerText = "Wrong Password";
-        return;
-    }
+    if (!username || !password) {
 
-    let deptCode = u.slice(0, -1);
-    let year = u.slice(-1);
-
-    if (!departments[deptCode] || !["1", "2", "3"].includes(year)) {
-
-        document.getElementById("loginMsg").innerText = "Invalid Username";
+        document.getElementById("loginMsg").innerText = "Enter Username and Password";
         return;
 
     }
 
-    currentUser = {
-        dept: departments[deptCode],
-        year: year
-    };
+    try {
 
-    saveData();
+        const response = await fetch("/api/login", {
 
-    window.location.href = "home.html";
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                username: username,
+                password: password
+            })
+
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+
+            document.getElementById("loginMsg").innerText =
+                data.message || "Login Failed";
+
+            return;
+
+        }
+
+        currentUser = {
+            dept: data.dept,
+            year: data.year
+        };
+
+        saveData();
+
+        window.location.href = "home.html";
+
+    }
+
+    catch (error) {
+
+        console.error("Login Error:", error);
+        document.getElementById("loginMsg").innerText = "Server Error";
+
+    }
 
 }
 
@@ -77,14 +106,19 @@ function loadUser() {
     currentUser = JSON.parse(localStorage.getItem("currentUser"));
 
     if (!currentUser) {
+
         window.location.href = "index.html";
         return;
+
     }
 
     let userInfo = document.getElementById("userInfo");
 
     if (userInfo) {
-        userInfo.innerText = currentUser.dept + " - " + currentUser.year + " Year";
+
+        userInfo.innerText =
+            currentUser.dept + " - " + currentUser.year + " Year";
+
     }
 
 }
@@ -96,7 +130,10 @@ LOGOUT
 
 function logout() {
 
+    fetch("/api/logout");
+
     localStorage.removeItem("currentUser");
+
     window.location.href = "index.html";
 
 }
@@ -112,8 +149,10 @@ function addStudent() {
     let id = document.getElementById("studentID").value.trim();
 
     if (!name || !id) {
+
         alert("Fill all fields");
         return;
+
     }
 
     students.push({
@@ -145,8 +184,10 @@ function uploadExcel() {
     const file = document.getElementById("excelFile").files[0];
 
     if (!file) {
+
         alert("Select Excel File");
         return;
+
     }
 
     const reader = new FileReader();
@@ -293,7 +334,9 @@ function markAttendance(id, date, status) {
     );
 
     if (status === "absent") {
+
         attendance.push({ id, date });
+
     }
 
     saveData();
@@ -318,6 +361,7 @@ function generateReport() {
     }
 
     let body = document.getElementById("reportBody");
+
     body.innerHTML = "";
 
     let days = new Set(
@@ -329,7 +373,10 @@ function generateReport() {
     let total = days.size;
 
     students
-        .filter(s => s.dept === currentUser.dept && s.year === currentUser.year)
+        .filter(s =>
+            s.dept === currentUser.dept &&
+            s.year === currentUser.year
+        )
         .forEach(s => {
 
             let absent = attendance.filter(a =>
@@ -374,8 +421,10 @@ function downloadReport() {
     let table = document.querySelector("table");
 
     if (!table) {
+
         alert("No table found");
         return;
+
     }
 
     let wb = XLSX.utils.table_to_book(table, { sheet: "Report" });
