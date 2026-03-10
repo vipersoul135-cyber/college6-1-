@@ -1,20 +1,12 @@
-
-
-
 <!DOCTYPE html>
 <html>
 
 <head>
-    <title>THRC</title>
+    <title>Register</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <header class="header">
-        <img src="img/logo.png" alt="Logo" class="logo">
-        <h2 class="center" style="padding-left: 35%;">College Attendance System</h2>
-    </header>
-
     <div class="container center">
 
         <h3>Register Student</h3>
@@ -33,112 +25,114 @@
         <button class="red" onclick="location.href='home.html'">Back</button>
 
     </div>
-    <script>
-        // Add student function (for registering a student)
-        //BASE URL AND TOKEN
-        const BASE_URL = 'https://attendancesystem-ln29.onrender.com/api';
-        const token = localStorage.getItem("token");
-        async function addStudent() {
-            const studentName = document.getElementById("studentName").value;
-            const studentId = document.getElementById("studentId").value;
 
-            if (!studentName || !studentId) {
-                alert("Please fill all fields");
-                return;
-            }
-
-            if (!token) {
-                alert("No token found! Please log in.");
-                return;
-            }
-
-            try {
-                const response = await fetch(`${BASE_URL}/students/register`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        studentName: studentName,  // Send studentName in the request body
-                        studentId: studentId,      // Send studentId in the request body
-                    }),
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    alert("Student Registered Successfully");
-                    document.getElementById("studentName").value = "";
-                    document.getElementById("studentId").value = "";
-                } else {
-                    alert(data.message || "Registration Failed");
-                }
-            } catch (error) {
-                console.error(error);
-                alert("Server Error");
-            }
-        }
-        // Upload Form Script
-        const form = document.getElementById("uploadForm");
-
-        form.addEventListener("submit", async function (e) {
-            e.preventDefault();
-
-            const file = document.getElementById("file").files[0];
-
-            // Check if a file is selected
-            if (!file) {
-                document.getElementById("result").innerHTML =
-                    "<span style='color:red'>Please select an Excel file</span>";
-                return;
-            }
-
-            // Get year and department from localStorage
-            const year = localStorage.getItem("year");
-            const department = localStorage.getItem("department");
-
-            // If either is missing, show error
-            if (!year || !department) {
-                document.getElementById("result").innerHTML =
-                    "<span style='color:red'>Year or Department not set in your profile.</span>";
-                return;
-            }
-
-            // Prepare FormData
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("year", year);
-            formData.append("department", department);
-
-            try {
-                const res = await fetch(`${BASE_URL}/upload`, {
-                    method: "POST",
-                    body: formData,
-                    // credentials: "include", // include cookies if needed
-                    headers: {
-                        Authorization: `Bearer ${token}` //auth token
-                    }
-                });
-
-                const data = await res.json();
-
-                if (res.ok) {
-                    // Success message
-                    document.getElementById("result").innerHTML =
-                        `<span style="color:green">Upload Successful</span><br>
-        ${JSON.stringify(data)}`;
-                } else {
-                    document.getElementById("result").innerHTML =
-                        `<span style="color:red">${data.message || "Upload failed"}</span>`;
-                }
-            } catch (err) {
-                console.error(err);
-                document.getElementById("result").innerHTML =
-                    "<span style='color:red'>Upload failed. Please try again.</span>";
-            }
-        });
-    </script>
 </body>
 
 </html>
+
+
+
+<script>
+    // Upload Form Script
+    const form = document.getElementById("uploadForm");
+
+    form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        const file = document.getElementById("file").files[0];
+
+        // Check if a file is selected
+        if (!file) {
+            document.getElementById("result").innerHTML =
+                "<span style='color:red'>Please select an Excel file</span>";
+            return;
+        }
+
+        // Get year and department from localStorage
+        const year = localStorage.getItem("year");
+        const department = localStorage.getItem("department");
+
+        // If either is missing, show error
+        if (!year || !department) {
+            document.getElementById("result").innerHTML =
+                "<span style='color:red'>Year or Department not set in your profile.</span>";
+            return;
+        }
+
+        // Prepare FormData
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("year", year);
+        formData.append("department", department);
+
+        try {
+            const res = await fetch(`${BASE_URL}/upload`, {
+                method: "POST",
+                body: formData,
+                // credentials: "include", // include cookies if needed
+                headers: {
+                    Authorization: `Bearer ${token}` //auth token
+                }
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                // Success message
+                document.getElementById("result").innerHTML =
+                    `<span style="color:green">Upload Successful</span><br>
+        ${JSON.stringify(data)}`;
+            } else {
+                document.getElementById("result").innerHTML =
+                    `<span style="color:red">${data.message || "Upload failed"}</span>`;
+            }
+        } catch (err) {
+            console.error(err);
+            document.getElementById("result").innerHTML =
+                "<span style='color:red'>Upload failed. Please try again.</span>";
+        }
+    });
+    // Add student function (for registering a student)
+    async function addStudent() {
+        const studentName = document.getElementById("studentName").value;
+        const studentId = document.getElementById("studentId").value;
+
+        if (!studentName || !studentId) {
+            alert("Please fill all fields");
+            return;
+        }
+
+        if (!token) {
+            alert("No token found! Please log in.");
+            return;
+        }
+
+        try {
+            const response = await fetch(`${BASE_URL}/students/register`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    studentName: studentName,  // Send studentName in the request body
+                    studentId: studentId,      // Send studentId in the request body
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert("Student Registered Successfully");
+                document.getElementById("studentName").value = "";
+                document.getElementById("studentId").value = "";
+            } else {
+                alert(data.message || "Registration Failed");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Server Error");
+        }
+    }
+
+</script>
