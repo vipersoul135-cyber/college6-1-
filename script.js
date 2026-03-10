@@ -77,7 +77,7 @@ async function login() {
         }
 
         currentUser = {
-            dept: data.dept,
+            department: data.department,
             year: data.year
         };
 
@@ -117,7 +117,7 @@ function loadUser() {
     if (userInfo) {
 
         userInfo.innerText =
-            currentUser.dept + " - " + currentUser.year + " Year";
+            currentUser.department + " - " + currentUser.year + " Year";
 
     }
 
@@ -160,7 +160,7 @@ function addStudent() {
         serial: students.length + 1,
         id: id,
         name: name,
-        dept: currentUser.department,
+        department: currentUser.department,
         year: currentUser.year
 
     });
@@ -179,57 +179,66 @@ function addStudent() {
 UPLOAD EXCEL
 ========================= */
 
-function uploadExcel() {
+// Upload Form Script
+const form = document.getElementById("uploadForm");
 
-    const file = document.getElementById("excelFile").files[0];
+form.addEventListener("submit", async function (e) {
+    e.preventDefault();
 
+    const file = document.getElementById("file").files[0];
+
+    // Check if a file is selected
     if (!file) {
-
-        alert("Select Excel File");
+        document.getElementById("result").innerHTML =
+            "<span style='color:red'>Please select an Excel file</span>";
         return;
-
     }
 
-    const reader = new FileReader();
+    // Get year and department from localStorage
+    const year = localStorage.getItem("year");
+    const department = localStorage.getItem("department");
 
-    reader.onload = function (e) {
+    // If either is missing, show error
+    if (!year || !department) {
+        document.getElementById("result").innerHTML =
+            "<span style='color:red'>Year or Department not set in your profile.</span>";
+        return;
+    }
 
-        const data = new Uint8Array(e.target.result);
+    // Prepare FormData
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("year", year);
+    formData.append("department", department);
 
-        const workbook = XLSX.read(data, { type: "array" });
+    try {
+        const res = await fetch(`${BASE_URL}/upload`, {
+            method: "POST",
+            body: formData,
+            // credentials: "include", // include cookies if needed
+            headers: {
+                Authorization: `Bearer ${token}` // your auth token
+            }
+        });
 
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const data = await res.json();
 
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-        for (let i = 1; i < rows.length; i++) {
-
-            let regNo = rows[i][1];
-            let name = rows[i][2];
-
-            if (!regNo || !name) continue;
-
-            students.push({
-
-                serial: students.length + 1,
-                id: regNo.toString(),
-                name: name.toString(),
-                dept: currentUser.dept,
-                year: currentUser.year
-
-            });
-
+        if (res.ok) {
+            // Success message
+            document.getElementById("result").innerHTML =
+                `<span style="color:green">Upload Successful</span><br>
+        ${JSON.stringify(data)}`;
+        } else {
+            document.getElementById("result").innerHTML =
+                `<span style="color:red">${data.message || "Upload failed"}</span>`;
         }
+    } catch (err) {
+        console.error(err);
+        document.getElementById("result").innerHTML =
+            "<span style='color:red'>Upload failed. Please try again.</span>";
+    }
+});
 
-        saveData();
-
-        alert("Students Imported");
-
-    };
-
-    reader.readAsArrayBuffer(file);
-
-}
 
 
 /* =========================
@@ -241,7 +250,7 @@ function clearStudents() {
     if (!confirm("Delete all students?")) return;
 
     students = students.filter(s =>
-        !(s.dept === currentUser.dept && s.year === currentUser.year)
+        !(s.department === currentUser.department && s.year === currentUser.year)
     );
 
     saveData();
@@ -278,7 +287,7 @@ function renderAttendance() {
     body.innerHTML = "";
 
     let filtered = students.filter(s =>
-        s.dept === currentUser.dept &&
+        s.department === currentUser.department &&
         s.year === currentUser.year
     );
 
@@ -345,6 +354,26 @@ function markAttendance(id, date, status) {
 
 
 /* =========================
+SUBMIT ATTENDANCE
+========================= */
+
+function submitAttendance() {
+
+    let date = document.getElementById("attendanceDate").value;
+
+    if (!date) {
+        alert("Select Date");
+        return;
+    }
+
+    saveData();
+
+    alert("Attendance Submitted Successfully");
+
+}
+
+
+/* =========================
 GENERATE REPORT
 ========================= */
 
@@ -374,7 +403,7 @@ function generateReport() {
 
     students
         .filter(s =>
-            s.dept === currentUser.dept &&
+            s.department === currentUser.department &&
             s.year === currentUser.year
         )
         .forEach(s => {
