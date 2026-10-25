@@ -1,58 +1,72 @@
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
-const path = require('path');
 
-// Load environment variables
 dotenv.config();
 
 const connectDB = require('./config/db');
 
-// Route imports
+// Existing route imports
 const authRoutes = require('./routes/authRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const studentRequestRoutes = require('./routes/studentRequestRoutes');
 
 const app = express();
 
-// Connect to MongoDB Atlas
-connectDB();
-
-// Security HTTP headers
+// Security middleware
 app.use(helmet());
 
-// CORS Configuration
-const allowedOrigin = process.env.FRONTEND_ORIGIN || '*';
+// CORS configuration
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5500')
+    .split(',')
+    .map(origin => origin.trim());
+
 app.use(
     cors({
-        origin: allowedOrigin === '*' ? '*' : allowedOrigin.split(','),
-        methods: ['GET', 'POST', 'PUT', 'DELETE'],
+        origin: (origin, callback) => {
+            // Permit requests without an Origin header, such as
+            // command-line health checks.
+            if (!origin || allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            return callback(new Error('Origin not allowed by CORS'));
+        },
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization']
     })
 );
 
-// Body Parser
+// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health Check Endpoint
+// Health check
 app.get('/api/health', (req, res) => {
-    res.status(200).json({
-        status: 'OK',
+    const mongoose = require('mongoose');
+
+    const connected = mongoose.connection.readyState === 1;
+
+    res.status(connected ? 200 : 503).json({
+        status: connected ? 'OK' : 'DATABASE_DISCONNECTED',
         service: 'College Attendance Management API',
+        database: connected ? 'Connected' : 'Disconnected',
         timestamp: new Date().toISOString()
     });
 });
 
-// API Routes
+// Existing API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/student-requests', studentRequestRoutes);
 
-// 404 Handler for undefined API routes
+// 404 handler
 app.use((req, res, next) => {
     res.status(404).json({
         success: false,
@@ -60,23 +74,39 @@ app.use((req, res, next) => {
     });
 });
 
-// Centralized Error Handling Middleware
+// Central error handler
 app.use((err, req, res, next) => {
-    console.error('Unhandled Server Error:', err);
+    console.error('Server error:', err.message);
 
-    const statusCode = err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
+    const statusCode = err.statusCode || 500;
+
     res.status(statusCode).json({
         success: false,
         message: err.message || 'Internal Server Error',
-        stack: process.env.NODE_ENV === 'production' ? null : err.stack
+        stack: process.env.NODE_ENV === 'production'
+            ? undefined
+            : err.stack
     });
 });
 
+// Connect database first, then start server
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-    console.log(`🚀 Attendance Backend Server running on port ${PORT}`);
-    console.log(`📡 API Base: http://localhost:${PORT}/api`);
-});
+async function startServer() {
+    try {
+        await connectDB();
+
+        app.listen(PORT, () => {
+            console.log(`Attendance Backend running on port ${PORT}`);
+            console.log(`API Base: http://localhost:${PORT}/api`);
+            console.log(`Health Check: http://localhost:${PORT}/api/health`);
+        });
+    } catch (error) {
+        console.error('Server startup failed because MongoDB is unavailable.');
+        process.exitCode = 1;
+    }
+}
+
+startServer();
 
 module.exports = app;

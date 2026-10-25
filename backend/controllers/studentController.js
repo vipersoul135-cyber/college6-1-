@@ -148,8 +148,22 @@ const batchAddStudents = async (req, res) => {
             const update = {
                 studentName: sName,
                 serial: sSerial,
+                email: item.email,
+                phone: item.phone,
+                dateOfBirth: item.dateOfBirth,
+                address: item.address,
+                parentName: item.parentName,
+                parentPhone: item.parentPhone,
+                photo: item.photo,
                 status: 'active'
             };
+
+            // Remove undefined/null values to avoid overwriting with empty values
+            Object.keys(update).forEach(key => {
+                if (update[key] === undefined || update[key] === null || update[key] === '') {
+                    delete update[key];
+                }
+            });
 
             const result = await Student.findOneAndUpdate(filter, update, {
                 upsert: true,
@@ -241,10 +255,38 @@ const uploadExcel = async (req, res) => {
                 (keys[2] !== undefined ? row[keys[2]] : keys[1] !== undefined ? row[keys[1]] : '') || ''
             ).trim();
 
+            // Optional fields - case-insensitive matching
+            const email = row['email'] || row['Email'] || row['EMAIL'] || '';
+            const phone = row['phone'] || row['Phone'] || row['PHONE'] || '';
+            const dateOfBirth = row['date of birth'] || row['Date of Birth'] || row['Date of birth'] ||
+                                row['dob'] || row['Dob'] || row['DOB'] || '';
+            const address = row['address'] || row['Address'] || row['ADDRESS'] || '';
+            const parentName = row['parent name'] || row['Parent Name'] || row['Parent name'] ||
+                               row['father name'] || row['Father Name'] || row['Mother name'] ||
+                               row['mother name'] || row['guardian name'] || '';
+            const parentPhone = row['parent phone'] || row['Parent Phone'] ||
+                                row['Parent phone'] || row['guardian phone'] || '';
+            const photo = row['photo'] || row['Photo'] || row['PHOTO'] || row['photo_url'] || row['Photo URL'] || '';
+
             const serialVal = row['serial number'] || row['Serial Number'] ||
                               row['S.No'] || row['sno'] || row['Sno'] || (i + 1);
 
             if (!id && !name) continue;
+
+            const updateData = {
+                studentName: name || 'Unknown',
+                serial: Number(serialVal) || (i + 1),
+                status: 'active'
+            };
+
+            // Only add optional fields if they have values
+            if (email.trim()) updateData.email = email.trim();
+            if (phone.trim()) updateData.phone = phone.trim();
+            if (dateOfBirth.trim()) updateData.dateOfBirth = dateOfBirth.trim();
+            if (address.trim()) updateData.address = address.trim();
+            if (parentName.trim()) updateData.parentName = parentName.trim();
+            if (parentPhone.trim()) updateData.parentPhone = parentPhone.trim();
+            if (photo.trim()) updateData.photo = photo.trim();
 
             await Student.findOneAndUpdate(
                 {
@@ -252,11 +294,7 @@ const uploadExcel = async (req, res) => {
                     department: targetDept,
                     year: targetYear
                 },
-                {
-                    studentName: name || 'Unknown',
-                    serial: Number(serialVal) || (i + 1),
-                    status: 'active'
-                },
+                updateData,
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             );
 

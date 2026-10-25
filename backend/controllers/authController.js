@@ -106,6 +106,28 @@ const getMe = async (req, res) => {
 };
 
 /**
+ * @desc    Logout user (clears token)
+ * @route   POST /api/auth/logout
+ * @access  Private
+ */
+const logout = async (req, res) => {
+    try {
+        // Token is already invalidated on the client side by clearing localStorage
+        // This endpoint exists for future session management if needed
+        res.status(200).json({
+            success: true,
+            message: 'Logout successful'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to logout',
+            error: error.message
+        });
+    }
+};
+
+/**
  * @desc    Create staff account (Admin Only)
  * @route   POST /api/auth/staff
  * @access  Private/Admin
@@ -227,6 +249,7 @@ const updateStaff = async (req, res) => {
 module.exports = {
     login,
     getMe,
+    logout,
     createStaff,
     listStaff,
     updateStaff

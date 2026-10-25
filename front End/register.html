@@ -2,28 +2,187 @@
 <html>
 
 <head>
-    <title>Register</title>
+    <title>Register Student</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .register-container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .page-title {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .form-section {
+            background: transparent;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .form-section h4 {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            color: white;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid white;
+            border-radius: 5px;
+            background: transparent;
+            color: white;
+            box-sizing: border-box;
+        }
+
+        .form-group select option {
+            background: #1a1a1a;
+            color: white;
+        }
+
+        .form-group input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: white;
+            border: 1px solid white;
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .message {
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .message.success {
+            background-color: transparent;
+            color: #4caf50;
+            border: 1px solid #4caf50;
+        }
+
+        .message.error {
+            background-color: transparent;
+            color: #f44336;
+            border: 1px solid #f44336;
+        }
+
+        @media (max-width: 768px) {
+            .form-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
 </head>
 
 <body>
-    <div class="container center">
+    <header class="header">
+        <img src="img/logo.png" alt="Logo" class="logo">
+        <h2 class="center" style="padding-left: 35%;">College Attendance System</h2>
+    </header>
 
-        <h3>Register Student</h3>
+    <div class="register-container">
+        <h1 class="page-title">Register New Student</h1>
 
-        <input id="studentName" placeholder="Student Name">
-        <input id="studentId" placeholder="Student ID"><br>
-        <!-- Excel opeartion-->
-        <form id="uploadForm">
-            <input type="file" name="file" id="file" accept=".xls,.xlsx" required>
-            <button type="submit">Upload</button>
-        </form>
+        <!-- Individual Student Registration -->
+        <div class="form-section">
+            <h4>Add Individual Student</h4>
 
-        <div id="result"></div>
+            <div class="form-group">
+                <label for="studentName">Student Name *</label>
+                <input type="text" id="studentName" placeholder="" required>
+            </div>
 
-        <button onclick="addStudent()">Add</button>
-        <button class="red" onclick="location.href='admin.html'">Back</button>
+            <div class="form-group">
+                <label for="studentId">Student Register Number *</label>
+                <input type="text" id="studentId" placeholder="" required>
+            </div>
 
+            <div class="form-group">
+                <label for="studentDepartment">Department *</label>
+                <select id="studentDepartment" required>
+                    <option value="">Select Department</option>
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Information Technology">Information Technology</option>
+                    <option value="Tamil">Tamil</option>
+                    <option value="English">English</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="studentYear">Year *</label>
+                <select id="studentYear" required>
+                    <option value="">Select Year</option>
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                </select>
+            </div>
+
+            <div class="btn-secondary-use">
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-primary" onclick="addStudent()"
+                    style="background-color: #007bff;">Add Student</button>
+                <button type="button" class="btn btn-secondary" onclick="clearForm()"
+                    style="background-color: #007bff;">Clear Form</button>
+            </div>
+        </div>
+        <center>
+            <button class="btn-secondary-use" onclick="location.href='admin.html'">Back to Admin Panel</button>
+        </center>
     </div>
 
 </body>
@@ -31,9 +190,167 @@
 </html>
 
 
-
 <script>
-    // Upload Form Script
+    // Get current user and check authentication
+    function getCurrentUser() {
+        try {
+            return JSON.parse(localStorage.getItem("currentUser")) || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // Check if user is authenticated and is admin
+    function checkAuth() {
+        const user = getCurrentUser();
+        if (!user) {
+            alert("Please login first.");
+            window.location.href = "index.html";
+            return false;
+        }
+        if (user.role !== "admin") {
+            alert("Access denied. Admin privileges required.");
+            window.location.href = "index.html";
+            return false;
+        }
+        return true;
+    }
+    // Initialize page
+    function initPage() {
+        if (!checkAuth()) return;
+
+        const user = getCurrentUser();
+        console.log("Register page initialized for user:", user.name);
+    }
+
+    // Show message to user
+    function showMessage(message, type = 'success') {
+        const resultDiv = document.getElementById("result");
+        resultDiv.innerHTML = `<div class="message ${type}">${message}</div>`;
+
+        // Auto-hide success messages after 3 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                resultDiv.innerHTML = '';
+            }, 3000);
+        }
+    }
+
+    // Clear the registration form
+    function clearForm() {
+        document.getElementById("studentName").value = "";
+        document.getElementById("studentId").value = "";
+        document.getElementById("studentDepartment").value = "";
+        document.getElementById("studentYear").value = "";
+    }
+
+    // Add individual student function
+    async function addStudent() {
+        const studentName = document.getElementById("studentName").value.trim();
+        const studentId = document.getElementById("studentId").value.trim();
+        const department = document.getElementById("studentDepartment").value;
+        const year = document.getElementById("studentYear").value;
+
+        // Validation
+        if (!studentName) {
+            alert("Please enter student name");
+            document.getElementById("studentName").focus();
+            return;
+        }
+
+        if (!studentId) {
+            alert("Please enter student register number");
+            document.getElementById("studentId").focus();
+            return;
+        }
+
+        if (!department) {
+            alert("Please select department");
+            document.getElementById("studentDepartment").focus();
+            return;
+        }
+
+        if (!year) {
+            alert("Please select year");
+            document.getElementById("studentYear").focus();
+            return;
+        }
+
+        // Check for duplicate student ID
+        const existingStudents = JSON.parse(localStorage.getItem("students")) || [];
+        const isDuplicate = existingStudents.some(s =>
+            (s.studentId || s.id || "").toLowerCase() === studentId.toLowerCase()
+        );
+
+        if (isDuplicate) {
+            alert(`Student with register number "${studentId}" already exists!`);
+            document.getElementById("studentId").focus();
+            return;
+        }
+
+        // Create student object
+        const student = {
+            serial: existingStudents.length + 1,
+            studentId: studentId,
+            studentName: studentName,
+            id: studentId, // For compatibility
+            name: studentName, // For compatibility
+            department: department,
+            year: year
+        };
+
+        try {
+            // Try to save to backend first
+            const token = localStorage.getItem("token");
+            let backendSuccess = false;
+
+            if (token) {
+                try {
+                    const BASE_URL = 'http://localhost:5000/api';
+                    const response = await fetch(`${BASE_URL}/students/register`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                            studentName: studentName,
+                            studentId: studentId,
+                            department: department,
+                            year: year
+                        }),
+                    });
+
+                    if (response.ok) {
+                        backendSuccess = true;
+                        console.log("Student saved to backend successfully");
+                    }
+                } catch (backendError) {
+                    console.log("Backend unavailable, saving locally:", backendError.message);
+                }
+            }
+
+            // Always save to localStorage (works offline)
+            existingStudents.push(student);
+            localStorage.setItem("students", JSON.stringify(existingStudents));
+
+            // Success message
+            const successMsg = backendSuccess
+                ? " Student registered successfully (saved to database and locally)!"
+                : " Student registered successfully (saved locally)!";
+
+            showMessage(successMsg, 'success');
+            clearForm();
+
+            console.log("Student registered:", student);
+
+        } catch (error) {
+            console.error("Registration error:", error);
+            showMessage(" Registration failed: " + error.message, 'error');
+        }
+    }
+
+    // Excel upload form handler
     const form = document.getElementById("uploadForm");
 
     form.addEventListener("submit", async function (e) {
@@ -43,85 +360,75 @@
 
         // Check if a file is selected
         if (!file) {
-            document.getElementById("result").innerHTML =
-                "<span style='color:red'>Please select an Excel file</span>";
+            showMessage("Please select an Excel file", 'error');
             return;
         }
 
-        // Get year and department from localStorage
-        const year = localStorage.getItem("year");
-        const department = localStorage.getItem("department");
+        // Check file type
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+            showMessage("Please select a valid Excel file (.xlsx or .xls)", 'error');
+            return;
+        }
 
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("year", year);
-        formData.append("department", department);
+        showMessage("Uploading file, please wait...", 'info');
 
         try {
-            const response = await fetch(`${BASE_URL}/students/upload`, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                },
-                body: formData,
-            });
+            // Get current user info for backend upload
+            const user = getCurrentUser();
+            const token = localStorage.getItem("token");
+            const BASE_URL = 'http://localhost:5000/api';
 
-            const data = await response.json();
+            if (token) {
+                const formData = new FormData();
+                formData.append("file", file);
 
-            if (response.ok) {
-                document.getElementById("result").innerHTML =
-                    "<span style='color:green'>Upload Successful</span>";
+                // If user has specific department/year, use that, otherwise let backend handle it
+                if (user.department && user.department !== "Administration") {
+                    formData.append("department", user.department);
+                }
+                if (user.year && user.year !== "All") {
+                    formData.append("year", user.year);
+                }
+
+                const response = await fetch(`${BASE_URL}/students/upload`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(" Excel upload successful! Students have been added to the database.", 'success');
+
+                    // Also try to sync with localStorage if backend provides the data
+                    if (data.students && Array.isArray(data.students)) {
+                        const existingStudents = JSON.parse(localStorage.getItem("students")) || [];
+                        const newStudents = [...existingStudents, ...data.students];
+                        localStorage.setItem("students", JSON.stringify(newStudents));
+                    }
+                } else {
+                    showMessage(`Upload failed: ${data.message || "Unknown error"}`, 'error');
+                }
             } else {
-                document.getElementById("result").innerHTML =
-                    `<span style='color:red'>${data.message || "Upload Failed"}</span>`;
+                showMessage("Authentication token not found. Please login again.", 'error');
             }
-        } catch (err) {
-            console.error(err);
-            document.getElementById("result").innerHTML =
-                "<span style='color:red'>Upload failed. Please try again.</span>";
-        }
-    });
-    // Add student function (for registering a student)
-    async function addStudent() {
-        const studentName = document.getElementById("studentName").value;
-        const studentId = document.getElementById("studentId").value;
 
-        if (!studentName || !studentId) {
-            alert("Please fill all fields");
-            return;
-        }
-
-        if (!token) {
-            alert("No token found! Please log in.");
-            return;
-        }
-
-        try {
-            const response = await fetch(`${BASE_URL}/students/register`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    studentName: studentName,  // Send studentName in the request body
-                    studentId: studentId,      // Send studentId in the request body
-                }),
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                alert("Student Registered Successfully");
-                document.getElementById("studentName").value = "";
-                document.getElementById("studentId").value = "";
-            } else {
-                alert(data.message || "Registration Failed");
-            }
         } catch (error) {
-            console.error(error);
-            alert("Server Error");
+            console.error("Upload error:", error);
+            showMessage(" Upload failed: " + error.message, 'error');
         }
-    }
+
+        // Clear the file input
+        document.getElementById("file").value = "";
+    });
+
+    // Initialize page when DOM is loaded
+    document.addEventListener("DOMContentLoaded", function () {
+        initPage();
+    });
 
 </script>

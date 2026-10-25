@@ -9,6 +9,25 @@
 
     <!-- SheetJS for reading Excel files in the browser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        .template-link {
+            display: inline-block;
+            background: #17a2b8;
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .template-link:hover {
+            background: #138496;
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        }
+    </style>
 </head>
 
 <body>
@@ -20,6 +39,12 @@
     <div class="container center">
 
         <h2>Upload Students</h2>
+        
+        <p style="text-align: center; margin-bottom: 15px;">
+            <a href="excel-upload-template.html" class="template-link" target="_blank">
+                📋 Download Upload Template (with all column details)
+            </a>
+        </p>
 
         <form id="uploadForm">
 
@@ -50,11 +75,42 @@
         <div id="result"></div>
 
         <br>
-        <button class="red" onclick="location.href='admin.html'">Back</button>
+        <button class="red" onclick="goBack()">Back</button>
 
     </div>
 
     <script>
+
+        function goBack() {
+            let user = null;
+            try {
+                user = JSON.parse(localStorage.getItem("currentUser"));
+            } catch (e) {}
+
+            if (user && user.role === "admin") {
+                window.location.href = "admin.html";
+            } else {
+                window.location.href = "home.html";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            let user = null;
+            try {
+                user = JSON.parse(localStorage.getItem("currentUser"));
+            } catch (e) {}
+
+            if (!user) {
+                window.location.href = "index.html";
+                return;
+            }
+
+            const isAllowed = user.role === "admin" || (user.role === "staff" && user.username === "cs1");
+            if (!isAllowed) {
+                alert("Access denied. Only Admin or CS Year 1 Staff can upload students.");
+                window.location.href = "home.html";
+            }
+        });
 
         document.getElementById("uploadForm").addEventListener("submit", function (e) {
 

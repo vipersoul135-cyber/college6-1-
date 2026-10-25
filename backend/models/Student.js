@@ -31,6 +31,35 @@ const studentSchema = new mongoose.Schema(
             type: String,
             enum: ['active', 'inactive'],
             default: 'active'
+        },
+        photo: {
+            type: String,
+            default: null,
+            trim: true
+        },
+        email: {
+            type: String,
+            trim: true,
+            lowercase: true
+        },
+        phone: {
+            type: String,
+            trim: true
+        },
+        dateOfBirth: {
+            type: Date
+        },
+        address: {
+            type: String,
+            trim: true
+        },
+        parentName: {
+            type: String,
+            trim: true
+        },
+        parentPhone: {
+            type: String,
+            trim: true
         }
     },
     {

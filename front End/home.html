@@ -1,37 +1,51 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-
     <meta charset="UTF-8">
-    <title>Home</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Staff Dashboard</title>
     <link rel="stylesheet" href="style.css">
-
 </head>
 
 <body>
     <header class="header">
-        <img src="img/logo.png" alt="Logo" class="logo">
+        <img src="img/logo.png" alt="Logo" class="logo" onerror="this.src='logo.png'">
         <h2 class="center" style="padding-left: 35%;">College Attendance System</h2>
     </header>
 
-    <div class="container center">
+    <div class="container center" style="padding-top: 80px;">
+        <h2 id="userInfo" style="color: #ffffff; line-height: 1.6;"></h2>
 
-        <h2 id="userInfo"></h2>
+        <div style="margin-top: 30px;">
+            <button onclick="location.href='attendance.html'" style="font-size: 16px; padding: 12px 28px;">Take
+                Attendance</button>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <button onclick="location.href='report.html'"
+                style="font-size: 16px; padding: 12px 28px; background-color: #28a745;">View Reports</button>
+        </div>
+
+        <!-- Bulk Upload Button - CS1 Staff Only -->
+        <div id="bulkUploadContainer" style="margin-top: 20px; display: none;">
+            <button onclick="location.href='excelupload.html'"
+                style="font-size: 16px; padding: 12px 28px; background-color: #0d6efd;">Upload Students (Excel)</button>
+        </div>
+
+        <!-- View Students Data Button - CS1 Staff Only -->
+        <div id="viewStudentsContainer" style="margin-top: 20px; display: none;">
+            <button onclick="location.href='studentsdata.html'"
+                style="font-size: 16px; padding: 12px 28px; background-color: #198754;">Manage Students Data</button>
+        </div>
 
 
-        <button onclick="location.href='attendance.html'">Attendance</button>
-
-        <br><br>
-
-        <button class="red" onclick="logout()">Logout</button>
-
+        <div style="margin-top: 20px;">
+            <button class="red" onclick="logout()" style="padding: 8px 24px;">Logout</button>
+        </div>
     </div>
 
     <script src="script.js"></script>
-
 </body>
 
 </html>
-

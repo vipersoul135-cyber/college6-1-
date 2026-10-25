@@ -5,18 +5,26 @@
 const BASE_URL = 'http://localhost:5000/api';
 
 /**
- * Check if user is authenticated. Auto-initialise admin session if missing.
+ * Check if user is authenticated and has admin privileges.
+ * Redirects staff users to home.html and unauthenticated users to index.html.
  */
 function checkAuth() {
-    let currentUser = JSON.parse(localStorage.getItem("currentUser"));
+    let currentUser = null;
+    try {
+        currentUser = JSON.parse(localStorage.getItem("currentUser"));
+    } catch (e) {
+        currentUser = null;
+    }
 
     if (!currentUser) {
-        currentUser = {
-            username: "admin",
-            role: "admin"
-        };
-        localStorage.setItem("currentUser", JSON.stringify(currentUser));
-        localStorage.setItem("token", "admin-token-authenticated");
+        window.location.href = "index.html";
+        return null;
+    }
+
+    if (currentUser.role !== "admin") {
+        alert("Access denied. Admin privileges required.");
+        window.location.href = "home.html";
+        return null;
     }
 
     return currentUser;
@@ -32,8 +40,43 @@ function loadAdminInfo() {
     const userInfoElem = document.getElementById("userInfo");
     if (!userInfoElem) return;
 
-    const username = currentUser.username || "admin";
+    const username = currentUser.name || currentUser.username || "admin";
     userInfoElem.innerText = `Admin: ${username}`;
+}
+
+/**
+ * Delete student data for a specified Department and Year
+ */
+async function deleteClassData() {
+    const dept = prompt("Enter Department to delete students from (e.g. Computer Science):");
+    if (!dept) return;
+    const year = prompt("Enter Year to delete (1, 2, or 3):");
+    if (!year) return;
+
+    if (confirm(`Are you sure you want to delete all students for ${dept} - Year ${year}?`)) {
+        try {
+            const token = localStorage.getItem("token");
+            const response = await fetch(`${BASE_URL}/reports/class`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ department: dept.trim(), year: year.trim() })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                alert(`✅ Successfully deleted all students for ${dept} - Year ${year}.`);
+            } else {
+                alert(`❌ Failed to delete: ${data.message || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error("Delete class data error:", error);
+            alert(`❌ Network error. Please check your connection. ${error.message}`);
+        }
+    }
 }
 
 /**

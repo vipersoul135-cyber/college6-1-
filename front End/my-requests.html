@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Student Requests</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .requests-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .page-title {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 15px;
+            border-radius: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+        }
+
+        .search-box input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .filter-box {
+            display: flex;
+            gap: 10px;
+        }
+
+        .filter-box select {
+            padding: 8px 15px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .btn-refresh {
+            padding: 8px 20px;
+            border-radius: 20px;
+            background: #7c3aed;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-refresh:hover {
+            background: #6d28d9;
+        }
+
+        .requests-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .requests-table th {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 15px 10px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .requests-table td {
+            padding: 12px 10px;
+            color: white;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .requests-table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+            border: 1px solid #fbbf24;
+        }
+
+        .status-approved {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+            border: 1px solid #4caf50;
+        }
+
+        .status-rejected {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+            border: 1px solid #f44336;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .empty-state h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+        }
+
+        .loading-message {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 18px;
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 40px;
+            color: #ff6b6b;
+            font-size: 18px;
+        }
+
+        .remarks-cell {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .remarks-cell:hover {
+            white-space: normal;
+            word-wrap: break-word;
+        }
+
+        .back-button {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .back-button button {
+            padding: 10px 30px;
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .back-button button:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .requests-container {
+                padding: 10px;
+            }
+
+            .toolbar {
+                flex-direction: column;
+            }
+
+            .search-box,
+            .filter-box {
+                width: 100%;
+            }
+
+            .requests-table {
+                font-size: 12px;
+            }
+
+            .requests-table th,
+            .requests-table td {
+                padding: 8px 5px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <img src="logo.png" alt="Logo" class="logo">
+        <h2 class="center" style="padding-left: 35%;">College Attendance System</h2>
+    </header>
+
+    <div class="requests-container">
+        <h1 class="page-title">My Student Requests</h1>
+
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search by student name or register number...">
+            </div>
+            <div class="filter-box">
+                <select id="statusFilter">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+                <button class="btn-refresh" onclick="loadRequests()">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <div id="tableContainer">
+            <div class="loading-message" id="loadingMessage">Loading your requests...</div>
+        </div>
+
+        <div class="back-button">
+            <button onclick="window.location.href='home.html'">Back to Dashboard</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        const BASE_URL = 'http://localhost:5000/api';
+        let currentUser = null;
+        let allRequests = [];
+        let filteredRequests = [];
+
+        // Check authentication
+        function checkAuth() {
+            currentUser = getCurrentUser();
+            
+            if (!currentUser) {
+                alert("Please login first.");
+                window.location.href = "index.html";
+                return false;
+            }
+            
+            if (currentUser.role !== "staff") {
+                alert("Access denied. This page is for staff only.");
+                window.location.href = "index.html";
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Load requests
+        async function loadRequests() {
+            if (!checkAuth()) return;
+
+            const container = document.getElementById("tableContainer");
+            container.innerHTML = '<div class="loading-message">Loading your requests...</div>';
+
+            try {
+                const token = localStorage.getItem("token");
+                
+                const response = await fetch(`${BASE_URL}/student-requests/my-requests`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    allRequests = data.requests || [];
+                    applyFilters();
+                } else {
+                    container.innerHTML = `<div class="error-message">❌ ${data.message || 'Failed to load requests'}</div>`;
+                }
+
+            } catch (error) {
+                console.error("Error loading requests:", error);
+                container.innerHTML = '<div class="error-message">❌ Network error. Please check your connection.</div>';
+            }
+        }
+
+        // Apply filters
+        function applyFilters() {
+            const searchTerm = document.getElementById("searchInput").value.toLowerCase();
+            const statusFilter = document.getElementById("statusFilter").value;
+
+            filteredRequests = allRequests.filter(request => {
+                const matchesSearch = 
+                    request.studentName.toLowerCase().includes(searchTerm) ||
+                    request.studentId.toLowerCase().includes(searchTerm);
+
+                const matchesStatus = !statusFilter || request.status === statusFilter;
+
+                return matchesSearch && matchesStatus;
+            });
+
+            displayRequests();
+        }
+
+        // Display requests
+        function displayRequests() {
+            const container = document.getElementById("tableContainer");
+
+            if (filteredRequests.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>📭 No Requests Found</h3>
+                        <p>You haven't submitted any student registration requests yet.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let tableHTML = `
+                <table class="requests-table">
+                    <thead>
+                        <tr>
+                            <th>S.No</th>
+                            <th>Student Name</th>
+                            <th>Register No</th>
+                            <th>Department</th>
+                            <th>Year</th>
+                            <th>Request Date</th>
+                            <th>Status</th>
+                            <th>Admin Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            filteredRequests.forEach((request, index) => {
+                const requestDate = new Date(request.createdAt).toLocaleDateString();
+                const statusClass = `status-${request.status}`;
+                const statusText = request.status.charAt(0).toUpperCase() + request.status.slice(1);
+
+                tableHTML += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${request.studentName}</td>
+                        <td><strong>${request.studentId}</strong></td>
+                        <td>${request.department}</td>
+                        <td>${request.year}${getYearSuffix(request.year)} Year</td>
+                        <td>${requestDate}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td class="remarks-cell" title="${request.adminRemarks || 'No remarks'}">
+                            ${request.adminRemarks || '-'}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += '</tbody></table>';
+            container.innerHTML = tableHTML;
+        }
+
+        // Helper function
+        function getYearSuffix(year) {
+            if (year === '1') return 'st';
+            if (year === '2') return 'nd';
+            if (year === '3') return 'rd';
+            return 'th';
+        }
+
+        // Event listeners
+        document.addEventListener("DOMContentLoaded", function() {
+            loadRequests();
+
+            document.getElementById("searchInput").addEventListener("input", applyFilters);
+            document.getElementById("statusFilter").addEventListener("change", applyFilters);
+        });
+    </script>
+</body>
+
+</html>

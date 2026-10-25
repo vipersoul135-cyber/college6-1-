@@ -2,6 +2,125 @@ const Student = require('../models/Student');
 const Attendance = require('../models/Attendance');
 
 /**
+ * @desc    Generate daily attendance report across all departments and years
+ * @route   GET /api/reports/daily
+ * @access  Private (Admin only)
+ */
+const getDailyReport = async (req, res) => {
+    try {
+        const { date } = req.query;
+
+        // Validate date parameter
+        if (!date) {
+            return res.status(400).json({
+                success: false,
+                message: 'Date is required (YYYY-MM-DD format)'
+            });
+        }
+
+        // Validate date format
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(date)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Date must be in YYYY-MM-DD format'
+            });
+        }
+
+        // Define departments and years (Information Technology, Tamil, and English removed for now)
+        const departments = ['Computer Science'];
+        const years = ['1', '2', '3'];
+
+        const dailyReport = [];
+        let serialNumber = 1;
+
+        // Generate report for each department and year
+        for (const department of departments) {
+            for (const year of years) {
+                // Get total enrolled students for this class
+                const totalStudents = await Student.countDocuments({
+                    department: department,
+                    year: year,
+                    status: 'active'
+                });
+
+                if (totalStudents === 0) {
+                    // Skip classes with no enrolled students
+                    continue;
+                }
+
+                // Get attendance records for this class on the specified date
+                const attendanceRecords = await Attendance.find({
+                    department: department,
+                    year: year,
+                    date: date
+                });
+
+                // Check if attendance has been recorded for this class on this date
+                const hasAttendanceRecords = attendanceRecords.length > 0;
+
+                if (!hasAttendanceRecords) {
+                    // No attendance recorded - show as "No attendance recorded"
+                    dailyReport.push({
+                        serialNo: serialNumber++,
+                        department: department,
+                        classYear: `${year}${getYearSuffix(year)} Year`,
+                        present: 'No attendance recorded',
+                        absent: 'No attendance recorded',
+                        percentage: 'No attendance recorded',
+                        totalStudents: totalStudents
+                    });
+                } else {
+                    // Calculate present and absent counts
+                    const presentCount = attendanceRecords.filter(record => record.status === 'present').length;
+                    const absentCount = attendanceRecords.filter(record => record.status === 'absent').length;
+                    
+                    // Calculate percentage based on total enrolled students
+                    const percentage = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+                    dailyReport.push({
+                        serialNo: serialNumber++,
+                        department: department,
+                        classYear: `${year}${getYearSuffix(year)} Year`,
+                        present: presentCount,
+                        absent: absentCount,
+                        percentage: `${percentage}%`,
+                        totalStudents: totalStudents
+                    });
+                }
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            date: date,
+            reportData: dailyReport,
+            totalClasses: dailyReport.length
+        });
+
+    } catch (error) {
+        console.error('getDailyReport error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to generate daily report',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Helper function to get year suffix (st, nd, rd, th)
+ */
+function getYearSuffix(year) {
+    switch(year) {
+        case '1': return 'st';
+        case '2': return 'nd';
+        case '3': return 'rd';
+        default: return 'th';
+    }
+}
+
+/**
  * @desc    Generate attendance summary report for class within date range
  * @route   GET /api/reports/attendance
  * @access  Private
@@ -210,5 +329,6 @@ const deleteClassData = async (req, res) => {
 module.exports = {
     getAttendanceReport,
     getClassStudents,
-    deleteClassData
+    deleteClassData,
+    getDailyReport
 };

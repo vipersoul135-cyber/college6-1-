@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const {
     login,
     getMe,
+    logout,
     createStaff,
     listStaff,
     updateStaff
@@ -28,6 +29,9 @@ router.post('/login', loginLimiter, login);
 
 // Authenticated session route
 router.get('/me', protect, getMe);
+
+// Logout route
+router.post('/logout', protect, logout);
 
 // Admin-only staff account management routes
 router.post('/staff', protect, requireRole('admin'), createStaff);
