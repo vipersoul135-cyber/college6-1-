@@ -1,32 +1,55 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
-const generateToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'fallback_secret', {
-        expiresIn: process.env.JWT_EXPIRES_IN || '24h'
-    });
+// Class IDs supported for the common Computer Science staff login
+const CLASS_YEAR_MAP = {
+    CS1: '1',
+    CS2: '2',
+    CS3: '3'
 };
 
-/**
- * @desc    Authenticate user & get JWT token
- * @route   POST /api/auth/login
- * @access  Public
- */
+// Generate JWT token
+const generateToken = (user, scope = {}) => {
+    if (!process.env.JWT_SECRET) {
+        throw new Error('JWT_SECRET is missing from .env file');
+    }
+
+    const payload = {
+        id: user._id || user.id,
+        role: user.role
+    };
+
+    if (scope.year) payload.year = String(scope.year);
+    if (scope.classId) payload.classId = scope.classId;
+
+    return jwt.sign(
+        payload,
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+};
+
+// Login
 const login = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, email, password } = req.body;
 
-        if (!username || !password) {
+        const loginId = username || email;
+
+        if (!loginId || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Please provide both username and password'
+                message: 'Username/email and password are required'
             });
         }
 
-        const normalizedUsername = username.trim().toLowerCase();
-
-        // Include password explicitly since schema sets select: false
-        const user = await User.findOne({ username: normalizedUsername }).select('+password');
+        const user = await User.findOne({
+            $or: [
+                { username: loginId },
+                { email: loginId }
+            ]
+        }).select('+password');
 
         if (!user) {
             return res.status(401).json({
@@ -35,14 +58,7 @@ const login = async (req, res) => {
             });
         }
 
-        if (user.status === 'inactive') {
-            return res.status(403).json({
-                success: false,
-                message: 'This account is deactivated. Contact administrator.'
-            });
-        }
-
-        const isMatch = await user.matchPassword(password.trim());
+        const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res.status(401).json({
@@ -51,197 +67,272 @@ const login = async (req, res) => {
             });
         }
 
-        const token = generateToken(user._id);
+        const token = generateToken(user);
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: 'Login successful',
             token,
             user: {
                 id: user._id,
-                name: user.name,
                 username: user.username,
+                name: user.name || user.username,
+                email: user.email,
                 role: user.role,
-                department: user.department,
-                year: user.year
+                department: user.department || '',
+                year: user.year || '',
+                status: user.status
             }
         });
     } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({
+        console.error('Login error:', error.message);
+
+        return res.status(500).json({
             success: false,
-            message: 'Server error during login',
-            error: error.message
+            message: 'Login failed due to a server error'
         });
     }
 };
 
-/**
- * @desc    Get current logged in user profile
- * @route   GET /api/auth/me
- * @access  Private
- */
+// Get current logged-in user
 const getMe = async (req, res) => {
     try {
-        res.status(200).json({
+        const userId = req.user.id || req.user._id;
+
+        const user = await User.findById(userId).select('-password');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userObj = user.toObject();
+        // Reflect the class selected through a scoped token (common staff account)
+        if (req.user.year && req.user.year !== 'All') {
+            userObj.year = req.user.year;
+        }
+        if (req.user.classId) {
+            userObj.classId = req.user.classId;
+        }
+
+        return res.json({
             success: true,
-            user: {
-                id: req.user._id,
-                name: req.user.name,
-                username: req.user.username,
-                role: req.user.role,
-                department: req.user.department,
-                year: req.user.year,
-                status: req.user.status,
-                createdAt: req.user.createdAt
-            }
+            user: userObj
         });
     } catch (error) {
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: 'Failed to retrieve profile',
-            error: error.message
+            message: 'Unable to get user details'
         });
     }
 };
 
-/**
- * @desc    Logout user (clears token)
- * @route   POST /api/auth/logout
- * @access  Private
- */
+// Logout
 const logout = async (req, res) => {
-    try {
-        // Token is already invalidated on the client side by clearing localStorage
-        // This endpoint exists for future session management if needed
-        res.status(200).json({
-            success: true,
-            message: 'Logout successful'
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Failed to logout',
-            error: error.message
-        });
-    }
+    return res.status(200).json({
+        success: true,
+        message: 'Logout successful. Remove the token from the client.'
+    });
 };
 
-/**
- * @desc    Create staff account (Admin Only)
- * @route   POST /api/auth/staff
- * @access  Private/Admin
- */
+// Create staff account (admin only)
 const createStaff = async (req, res) => {
     try {
-        const { username, password, name, department, year } = req.body;
+        const { username, email, password, role, department, year } = req.body;
 
-        if (!username || !password || !department) {
+        if (!username || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Username, password, and department are required'
+                message: 'Username and password are required'
             });
         }
 
-        const existing = await User.findOne({ username: username.trim().toLowerCase() });
-        if (existing) {
+        if (role && role.toLowerCase() !== 'staff') {
             return res.status(400).json({
                 success: false,
-                message: `Username '${username}' is already taken`
+                message: 'Only staff accounts can be created here'
             });
         }
 
-        const staff = await User.create({
-            username: username.trim().toLowerCase(),
-            password: password.trim(),
-            name: name || username,
-            role: 'staff',
-            department: department.trim(),
-            year: year || '1',
-            status: 'active'
+        const existingUser = await User.findOne({
+            $or: [
+                { username },
+                ...(email ? [{ email }] : [])
+            ]
         });
 
-        res.status(201).json({
+        if (existingUser) {
+            return res.status(409).json({
+                success: false,
+                message: 'Username or email already exists'
+            });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 12);
+
+        const staff = await User.create({
+            username,
+            ...(email ? { email } : {}),
+            password: hashedPassword,
+            role: 'staff',
+            ...(department ? { department } : {}),
+            ...(year ? { year } : {})
+        });
+
+        return res.status(201).json({
             success: true,
             message: 'Staff account created successfully',
             staff: {
                 id: staff._id,
                 username: staff.username,
-                name: staff.name,
+                email: staff.email,
                 role: staff.role,
                 department: staff.department,
                 year: staff.year
             }
         });
     } catch (error) {
-        res.status(500).json({
+        console.error('Create staff error:', error.message);
+
+        return res.status(500).json({
             success: false,
-            message: 'Failed to create staff account',
-            error: error.message
+            message: 'Unable to create staff account'
         });
     }
 };
 
-/**
- * @desc    List all staff accounts (Admin Only)
- * @route   GET /api/auth/staff
- * @access  Private/Admin
- */
+// List staff accounts
 const listStaff = async (req, res) => {
     try {
-        const staffList = await User.find({ role: 'staff' }).select('-password').sort({ createdAt: -1 });
-        res.status(200).json({
+        const staff = await User.find({ role: 'staff' })
+            .select('-password')
+            .sort({ username: 1 });
+
+        return res.json({
             success: true,
-            count: staffList.length,
-            staff: staffList
+            count: staff.length,
+            staff
         });
     } catch (error) {
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: 'Failed to retrieve staff accounts',
-            error: error.message
+            message: 'Unable to retrieve staff accounts'
         });
     }
 };
 
-/**
- * @desc    Update staff status or details (Admin Only)
- * @route   PUT /api/auth/staff/:id
- * @access  Private/Admin
- */
+// Update staff account
 const updateStaff = async (req, res) => {
     try {
-        const { name, department, year, status } = req.body;
-        const staff = await User.findById(req.params.id);
+        const { username, email, password, department, year } = req.body;
 
-        if (!staff || staff.role !== 'staff') {
-            return res.status(404).json({ success: false, message: 'Staff member not found' });
+        const staff = await User.findOne({
+            _id: req.params.id,
+            role: 'staff'
+        });
+
+        if (!staff) {
+            return res.status(404).json({
+                success: false,
+                message: 'Staff account not found'
+            });
         }
 
-        if (name) staff.name = name;
-        if (department) staff.department = department;
-        if (year) staff.year = year;
-        if (status) staff.status = status;
+        if (username !== undefined) staff.username = username;
+        if (email !== undefined) staff.email = email;
+        if (department !== undefined) staff.department = department;
+        if (year !== undefined) staff.year = year;
+
+        if (password) {
+            staff.password = await bcrypt.hash(password, 12);
+        }
 
         await staff.save();
 
-        res.status(200).json({
+        return res.json({
             success: true,
-            message: 'Staff updated successfully',
+            message: 'Staff account updated successfully',
             staff: {
                 id: staff._id,
                 username: staff.username,
-                name: staff.name,
+                email: staff.email,
+                role: staff.role,
                 department: staff.department,
-                year: staff.year,
-                status: staff.status
+                year: staff.year
             }
         });
     } catch (error) {
-        res.status(500).json({
+        console.error('Update staff error:', error.message);
+
+        return res.status(500).json({
             success: false,
-            message: 'Failed to update staff member',
-            error: error.message
+            message: 'Unable to update staff account'
+        });
+    }
+};
+
+// Select a class after logging in with the common Computer Science staff account
+const selectClass = async (req, res) => {
+    try {
+        if (!req.user || req.user.role !== 'staff') {
+            return res.status(403).json({
+                success: false,
+                message: 'Only staff accounts can select a class'
+            });
+        }
+
+        const classId = String(req.body.classId || '').trim().toUpperCase();
+        const targetYear = CLASS_YEAR_MAP[classId];
+
+        if (!targetYear) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid class. Choose CS1, CS2 or CS3'
+            });
+        }
+
+        const department = String(req.user.department || '').trim();
+        if (!/^computer\s+science$/i.test(department)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Class selection is only available for Computer Science staff'
+            });
+        }
+
+        const assignedYear = String(req.user.year || 'All');
+        if (assignedYear !== 'All' && assignedYear !== targetYear) {
+            return res.status(403).json({
+                success: false,
+                message: `Access denied: This account is assigned to Year ${assignedYear}`
+            });
+        }
+
+        const token = generateToken(req.user, { year: targetYear, classId });
+
+        return res.status(200).json({
+            success: true,
+            message: `${classId} selected`,
+            token,
+            user: {
+                id: req.user._id || req.user.id,
+                username: req.user.username,
+                name: req.user.name || req.user.username,
+                email: req.user.email || '',
+                role: 'staff',
+                department,
+                year: targetYear,
+                classId,
+                status: req.user.status || 'active'
+            }
+        });
+    } catch (error) {
+        console.error('Select class error:', error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: 'Unable to select class'
         });
     }
 };
@@ -252,5 +343,6 @@ module.exports = {
     logout,
     createStaff,
     listStaff,
-    updateStaff
+    updateStaff,
+    selectClass
 };

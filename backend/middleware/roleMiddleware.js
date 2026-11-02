@@ -35,9 +35,18 @@ const enforceClassScope = (req, res, next) => {
         return next(); // Admins have unrestricted access
     }
 
+    // Staff using the common account must choose a class first
+    if (!req.user.year || req.user.year === 'All') {
+        return res.status(403).json({
+            success: false,
+            message: 'Please select a class (CS1, CS2 or CS3) before accessing class data'
+        });
+    }
+
     // For staff, extract requested department and year from body, query or params
-    const reqDept = req.body.department || req.query.department;
-    const reqYear = req.body.year !== undefined ? String(req.body.year) : (req.query.year !== undefined ? String(req.query.year) : null);
+    const body = req.body || {};
+    const reqDept = body.department || req.query.department;
+    const reqYear = body.year !== undefined ? String(body.year) : (req.query.year !== undefined ? String(req.query.year) : null);
 
     if (reqDept && reqDept.trim().toLowerCase() !== req.user.department.trim().toLowerCase()) {
         return res.status(403).json({

@@ -1,7 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const StudentRequest = require('../models/StudentRequest');
-const Student = require('../models/Student');
 const { protect } = require('../middleware/authMiddleware');
 const { requireRole } = require('../middleware/roleMiddleware');
 const {
@@ -9,29 +7,31 @@ const {
     getMyRequests,
     getAllRequests,
     getPendingRequests,
+    getRequestById,
     approveRequest,
-    rejectRequest
+    rejectRequest,
+    completeRegistration
 } = require('../controllers/studentRequestController');
 
-// Middleware to handle both real JWT and local token authentication
+// Flexible authentication supporting both real JWT and local test tokens
 const flexibleAuth = async (req, res, next) => {
-    // First try the normal protect middleware
     try {
         await protect(req, res, (err) => {
-            if (!err) {
+            if (!err && req.user) {
                 return next();
             }
-            
-            // If JWT auth fails, check for local token and create a mock user
-            const token = req.headers.authorization?.split(' ')[1];
-            
+
+            // Check for local fallback token
+            const authHeader = req.headers.authorization;
+            const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+
             if (token && token.startsWith('local-token-')) {
-                const username = token.replace('local-token-', '');
-                
-                // Create a mock user object for local authentication
+                const username = token.replace('local-token-', '').toLowerCase();
+
                 if (username === 'admin') {
                     req.user = {
                         id: 'local-admin',
+                        _id: 'local-admin',
                         username: 'admin',
                         name: 'System Administrator',
                         role: 'admin',
@@ -42,6 +42,7 @@ const flexibleAuth = async (req, res, next) => {
                     const year = username.replace('cs', '');
                     req.user = {
                         id: `local-${username}`,
+                        _id: `local-${username}`,
                         username: username,
                         name: `CS Staff (Year ${year})`,
                         role: 'staff',
@@ -49,15 +50,15 @@ const flexibleAuth = async (req, res, next) => {
                         year: year
                     };
                 }
-                
+
                 if (req.user) {
                     return next();
                 }
             }
-            
+
             return res.status(401).json({
                 success: false,
-                message: 'Authentication required'
+                message: 'Authentication required. Please log in.'
             });
         });
     } catch (error) {
@@ -89,46 +90,71 @@ const flexibleRoleCheck = (...roles) => {
     };
 };
 
+// Student registration requests are only for 1st year (CS1) staff
+const requireFirstYearStaff = (req, res, next) => {
+    if (req.user && req.user.role === 'staff' && String(req.user.year || '') !== '1') {
+        return res.status(403).json({
+            success: false,
+            message: 'Student registration requests are available only to 1st year (CS1) staff.'
+        });
+    }
+    next();
+};
+
 /**
- * @route   POST /api/student-requests
+ * @route   POST /api/student-requests or /api/student-registration-requests
  * @desc    Submit a student registration request (Staff only)
- * @access  Private (Staff)
  */
-router.post('/', flexibleAuth, flexibleRoleCheck('staff'), submitRequest);
+router.post('/', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, submitRequest);
 
 /**
- * @route   GET /api/student-requests/my-requests
- * @desc    Get logged-in staff's own requests (Staff only)
- * @access  Private (Staff)
+ * @route   GET /api/student-requests/my-requests or /my
+ * @desc    Get logged-in staff's own registration requests (Staff only)
  */
-router.get('/my-requests', flexibleAuth, flexibleRoleCheck('staff'), getMyRequests);
+router.get('/my-requests', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, getMyRequests);
+router.get('/my', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, getMyRequests);
 
 /**
- * @route   GET /api/student-requests/all
- * @desc    Get all requests with filters (Admin only)
- * @access  Private (Admin)
+ * @route   GET /api/student-requests/all or /
+ * @desc    Get all requests with optional filters (Admin only)
  */
 router.get('/all', flexibleAuth, flexibleRoleCheck('admin'), getAllRequests);
+router.get('/', flexibleAuth, requireFirstYearStaff, (req, res, next) => {
+    // If admin, return all requests; if staff, return their own
+    if (req.user && req.user.role === 'admin') {
+        return getAllRequests(req, res, next);
+    }
+    return getMyRequests(req, res, next);
+});
 
 /**
  * @route   GET /api/student-requests/pending
  * @desc    Get pending requests (Admin only)
- * @access  Private (Admin)
  */
 router.get('/pending', flexibleAuth, flexibleRoleCheck('admin'), getPendingRequests);
 
 /**
  * @route   PATCH /api/student-requests/:id/approve
  * @desc    Approve a student registration request (Admin only)
- * @access  Private (Admin)
  */
 router.patch('/:id/approve', flexibleAuth, flexibleRoleCheck('admin'), approveRequest);
 
 /**
  * @route   PATCH /api/student-requests/:id/reject
  * @desc    Reject a student registration request (Admin only)
- * @access  Private (Admin)
  */
 router.patch('/:id/reject', flexibleAuth, flexibleRoleCheck('admin'), rejectRequest);
+
+/**
+ * @route   POST /api/student-requests/:id/complete-registration
+ * @desc    Complete student registration after Admin approval (Staff only)
+ */
+router.post('/:id/complete-registration', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, completeRegistration);
+
+/**
+ * @route   GET /api/student-requests/:id
+ * @desc    Get details for a single request
+ */
+router.get('/:id', flexibleAuth, requireFirstYearStaff, getRequestById);
 
 module.exports = router;

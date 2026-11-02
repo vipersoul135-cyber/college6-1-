@@ -24,7 +24,7 @@ const getAttendance = async (req, res) => {
             date: date.trim(),
             department: targetDept,
             year: targetYear
-        });      
+        });
 
         res.status(200).json({
             success: true,
@@ -63,12 +63,20 @@ const markAttendance = async (req, res) => {
         const targetDept = (req.user.role === 'staff') ? req.user.department : (department || req.user.department);
         const targetYear = (req.user.role === 'staff' && req.user.year !== 'All') ? req.user.year : (year || '1');
 
-        // Case A: Batch save (array of records: [{ studentId, status }, ...])
+        // Local development logins use non-ObjectId ids (e.g. "local-cs1"),
+        // which cannot be stored in the recordedBy ObjectId field.
+        const recorderId = /^[0-9a-fA-F]{24}$/.test(String(req.user._id || '')) ? req.user._id : null;
+
+        // Case A: Batch save (array of records)
         if (Array.isArray(records)) {
-            const bulkOps = records.map((rec) => {
+            const bulkOps = records.map(rec => {
                 const sId = String(rec.studentId || rec.id || '').trim().toUpperCase();
                 const sStatus = rec.status === 'absent' ? 'absent' : 'present';
-
+                const updateFields = {
+                    status: sStatus,
+                    studentName: rec.studentName || rec.name || ''
+                };
+                if (recorderId) updateFields.recordedBy = recorderId;
                 return {
                     updateOne: {
                         filter: {
@@ -78,11 +86,7 @@ const markAttendance = async (req, res) => {
                             year: targetYear
                         },
                         update: {
-                            $set: {
-                                status: sStatus,
-                                studentName: rec.studentName || rec.name || '',
-                                recordedBy: req.user._id
-                            }
+                            $set: updateFields
                         },
                         upsert: true
                     }
@@ -106,6 +110,8 @@ const markAttendance = async (req, res) => {
         if (studentId && status) {
             const normId = String(studentId).trim().toUpperCase();
             const normStatus = status === 'absent' ? 'absent' : 'present';
+            const updateFields = { status: normStatus };
+            if (recorderId) updateFields.recordedBy = recorderId;
 
             const record = await Attendance.findOneAndUpdate(
                 {
@@ -114,10 +120,7 @@ const markAttendance = async (req, res) => {
                     department: targetDept,
                     year: targetYear
                 },
-                {
-                    status: normStatus,
-                    recordedBy: req.user._id
-                },
+                updateFields,
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             );
 
@@ -142,7 +145,83 @@ const markAttendance = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Upload Excel with student details and attendance
+ * @route   POST /api/attendance/upload
+ * @access  Private (staff only)
+ */
+const ExcelJS = require('exceljs');
+const fs = require('fs');
+const path = require('path');
+
+const uploadExcel = async (req, res) => {
+    try {
+        // Ensure a file was uploaded by multer
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No Excel file uploaded' });
+        }
+        const { department, year } = req.body;
+        if (!department || !year) {
+            return res.status(400).json({ success: false, message: 'Department and year are required' });
+        }
+        // Load workbook
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(req.file.path);
+        const sheet = workbook.worksheets[0];
+        const rows = sheet.getRows(2, sheet.rowCount - 1) || [];
+        let insertedStudents = 0;
+        let updatedStudents = 0;
+        let insertedAttendance = 0;
+        for (const row of rows) {
+            if (!row) continue;
+            const values = row.values.slice(1); // drop first empty index
+            // Expect columns: RegNo, Name, Date, Status, Notes (order may vary)
+            const id = String(values[0] || '').trim();
+            const name = String(values[1] || '').trim();
+            const dateVal = values[2];
+            const statusRaw = String(values[3] || '').trim().toLowerCase();
+            const notes = String(values[4] || '').trim();
+            if (!id) continue; // skip rows without an ID
+            // ---- Student ----
+            let student = await Student.findOne({ studentId: id, department, year });
+            if (student) {
+                if (name && student.studentName !== name) {
+                    await Student.updateOne({ _id: student._id }, { studentName: name });
+                    updatedStudents++;
+                }
+            } else {
+                student = await Student.create({ studentId: id, studentName: name, department, year });
+                insertedStudents++;
+            }
+            // ---- Attendance ----
+            const attDate = dateVal instanceof Date ? dateVal : new Date(dateVal);
+            const status = statusRaw === 'absent' ? 'absent' : 'present';
+            await Attendance.create({
+                studentId: student._id,
+                department,
+                year,
+                date: attDate,
+                status,
+                notes,
+                recordedBy: req.user._id,
+            });
+            insertedAttendance++;
+        }
+        // Clean up uploaded file
+        fs.unlink(req.file.path, err => { if (err) console.warn('Failed to delete upload', err); });
+        res.json({
+            success: true,
+            message: 'Excel processed',
+            stats: { insertedStudents, updatedStudents, insertedAttendance }
+        });
+    } catch (err) {
+        console.error('uploadExcel error:', err);
+        res.status(500).json({ success: false, message: 'Failed to process Excel', error: err.message });
+    }
+};
+
 module.exports = {
     getAttendance,
-    markAttendance
+    markAttendance,
+    uploadExcel
 };

@@ -32,10 +32,16 @@ const studentSchema = new mongoose.Schema(
             enum: ['active', 'inactive'],
             default: 'active'
         },
+        /** GridFS file reference for the student's photo */
+        photoId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "fs.files",
+            default: null
+        },
+        /** Compressed Base64 image captured from the edit form */
         photo: {
             type: String,
-            default: null,
-            trim: true
+            default: ''
         },
         email: {
             type: String,

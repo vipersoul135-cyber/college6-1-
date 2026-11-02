@@ -1,6 +1,8 @@
 const XLSX = require('xlsx');
+const { uploadFile, deleteFile } = require('../utils/gridFS');
 const Student = require('../models/Student');
 const Attendance = require('../models/Attendance');
+// duplicate import removed
 
 /**
  * @desc    Get students filtered by department and year
@@ -78,11 +80,14 @@ const addStudent = async (req, res) => {
             });
         }
 
-        // Auto-assign serial if not provided
+        // Auto-assign serial if not provided - always after the current last student
         let assignSerial = serial;
         if (!assignSerial) {
-            const count = await Student.countDocuments({ department: targetDept, year: targetYear });
-            assignSerial = count + 1;
+            const highest = await Student.findOne({ department: targetDept, year: targetYear })
+                .sort({ serial: -1 })
+                .select('serial')
+                .lean();
+            assignSerial = (Number(highest && highest.serial) || 0) + 1;
         }
 
         const student = await Student.create({
@@ -251,7 +256,7 @@ const uploadExcel = async (req, res) => {
                 row['bname']       || row['Bname']       || row['BNAME']       ||
                 row['name']        || row['Name']        || row['NAME']        ||
                 row['studentName'] || row['StudentName'] || row['student name']||
-                row['Student']     || row['student']     ||
+                row['Student Name']|| row['Student']     || row['student']     ||
                 (keys[2] !== undefined ? row[keys[2]] : keys[1] !== undefined ? row[keys[1]] : '') || ''
             ).trim();
 
@@ -304,7 +309,12 @@ const uploadExcel = async (req, res) => {
         res.status(200).json({
             success: true,
             message: `Successfully uploaded and saved ${savedCount} students for ${targetDept} Year ${targetYear}`,
-            count: savedCount
+            count: savedCount,
+            stats: {
+                insertedStudents: savedCount,
+                updatedStudents: 0,
+                insertedAttendance: 0
+            }
         });
     } catch (error) {
         console.error('uploadExcel error:', error);
@@ -317,40 +327,253 @@ const uploadExcel = async (req, res) => {
 };
 
 /**
+ * @desc    Update a student's details
+ * @route   PUT /api/students/:id
+ * @access  Private (Staff restricted to their selected class, Admin unrestricted)
+ */
+const updateStudent = async (req, res) => {
+    try {
+        const identifier = String(req.params.id || '').trim();
+        const body = req.body || {};
+        const requestedDept = String(req.query.department || body.department || '').trim();
+        const requestedYear = String(req.query.year || body.year || '').trim();
+
+        const filter = identifier.match(/^[0-9a-fA-F]{24}$/)
+            ? { _id: identifier }
+            : { studentId: identifier.toUpperCase() };
+
+        if (req.user.role === 'staff') {
+            if (!req.user.year || req.user.year === 'All') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Please select a class (CS1, CS2 or CS3) first'
+                });
+            }
+            filter.department = req.user.department;
+            filter.year = String(req.user.year);
+        } else {
+            if (requestedDept) filter.department = requestedDept;
+            if (requestedYear) filter.year = requestedYear;
+        }
+
+        const matches = await Student.find(filter).limit(2);
+
+        if (matches.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Student not found in the selected class'
+            });
+        }
+
+        if (matches.length > 1) {
+            return res.status(409).json({
+                success: false,
+                message: 'This register number exists in more than one class. Specify department and year to update the correct record.'
+            });
+        }
+
+        const student = matches[0];
+
+        const studentName = String(body.studentName ?? body.name ?? student.studentName).trim();
+        const studentId = String(body.studentId ?? body.id ?? student.studentId).trim().toUpperCase();
+        const department = String(body.department || student.department).trim();
+        const year = String(body.year || student.year).trim();
+
+        if (!studentName || !studentId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Student name and Register Number/ID are required'
+            });
+        }
+
+        if (
+            req.user.role === 'staff' &&
+            (department.toLowerCase() !== req.user.department.trim().toLowerCase() ||
+                year !== String(req.user.year))
+        ) {
+            return res.status(403).json({
+                success: false,
+                message: 'You can only edit students in your selected class'
+            });
+        }
+
+        const classChanged = department !== student.department || year !== student.year;
+
+        const duplicate = await Student.findOne({
+            _id: { $ne: student._id },
+            studentId,
+            department,
+            year
+        });
+
+        if (duplicate) {
+            return res.status(409).json({
+                success: false,
+                message: `A student with Register Number '${studentId}' already exists in ${department} Year ${year}`
+            });
+        }
+
+        const updates = { studentName, studentId, department, year };
+
+        for (const field of ['email', 'phone', 'parentName', 'parentPhone', 'address', 'photo']) {
+            if (body[field] !== undefined) {
+                updates[field] = String(body[field] || '').trim();
+            }
+        }
+
+        if (body.status !== undefined) {
+            updates.status = body.status === 'inactive' ? 'inactive' : 'active';
+        }
+
+        if (body.dateOfBirth !== undefined) {
+            const rawDob = String(body.dateOfBirth || '').trim();
+            if (!rawDob) {
+                updates.dateOfBirth = null;
+            } else {
+                const parsedDob = new Date(rawDob);
+                if (Number.isNaN(parsedDob.getTime())) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Date of birth is not a valid date'
+                    });
+                }
+                updates.dateOfBirth = parsedDob;
+            }
+        }
+
+        if (classChanged) {
+            const highest = await Student.findOne({ department, year })
+                .sort({ serial: -1 })
+                .select('serial')
+                .lean();
+            updates.serial = (Number(highest && highest.serial) || 0) + 1;
+        }
+
+        const updatedStudent = await Student.findByIdAndUpdate(
+            student._id,
+            { $set: updates },
+            { new: true, runValidators: true }
+        );
+
+        const identityChanged =
+            studentId !== student.studentId ||
+            classChanged ||
+            studentName !== student.studentName;
+
+        if (identityChanged) {
+            try {
+                await Attendance.updateMany(
+                    {
+                        studentId: student.studentId,
+                        department: student.department,
+                        year: student.year
+                    },
+                    { $set: { studentId, studentName, department, year } }
+                );
+                await Attendance.updateMany(
+                    { student: student._id },
+                    { $set: { studentId, studentName, department, year } }
+                );
+            } catch (syncError) {
+                console.warn('Attendance sync after student update failed:', syncError.message);
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Student ${studentName} (${studentId}) updated successfully`,
+            student: updatedStudent
+        });
+    } catch (error) {
+        if (error && error.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: 'Another student already uses this Register Number in the selected class'
+            });
+        }
+
+        console.error('updateStudent error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update student',
+            error: error.message
+        });
+    }
+};
+
+/**
  * @desc    Delete single student
  * @route   DELETE /api/students/:id
  * @access  Private (Admin only)
  */
 const deleteStudent = async (req, res) => {
     try {
-        const studentId = req.params.id;
+        const studentId = String(req.params.id || '').trim();
+        const body = req.body || {};
+        const requestedDept = String(req.query.department || body.department || '').trim();
+        const requestedYear = String(req.query.year || body.year || '').trim();
 
-        // Try finding by MongoDB _id or studentId
-        let student;
-        if (studentId.match(/^[0-9a-fA-F]{24}$/)) {
-            student = await Student.findById(studentId);
+        const filter = studentId.match(/^[0-9a-fA-F]{24}$/)
+            ? { _id: studentId }
+            : { studentId: studentId.toUpperCase() };
+
+        if (req.user.role === 'staff') {
+            // Staff are always confined to their selected class.
+            if (!req.user.year || req.user.year === 'All') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Please select a class (CS1, CS2 or CS3) first'
+                });
+            }
+            filter.department = req.user.department;
+            filter.year = String(req.user.year);
         } else {
-            student = await Student.findOne({ studentId: studentId.trim().toUpperCase() });
+            if (requestedDept) filter.department = requestedDept;
+            if (requestedYear) filter.year = requestedYear;
         }
 
-        if (!student) {
-            return res.status(404).json({ success: false, message: 'Student not found' });
+        const matches = await Student.find(filter).limit(2);
+
+        if (matches.length === 0) {
+            return res.status(404).json({ success: false, message: 'Student not found in the selected class' });
         }
 
-        // Delete attendance history
+        if (matches.length > 1) {
+            return res.status(409).json({
+                success: false,
+                message: 'This register number exists in more than one class. Specify department and year to delete the correct record.'
+            });
+        }
+
+        const student = matches[0];
+
+        // Delete attendance for this exact student and class only
         await Attendance.deleteMany({
-            studentId: student.studentId,
-            department: student.department,
-            year: student.year
+            $or: [
+                {
+                    studentId: student.studentId,
+                    department: student.department,
+                    year: student.year
+                },
+                { student: student._id }
+            ]
         });
 
+        // Delete stored photo from GridFS if present
+        if (student.photoId) {
+            await deleteFile(student.photoId);
+        }
         await Student.findByIdAndDelete(student._id);
 
         res.status(200).json({
             success: true,
-            message: `Student ${student.studentName} (${student.studentId}) and attendance records removed`
+            message: `Student ${student.studentName} (${student.studentId}) and attendance records removed from ${student.department} Year ${student.year}`,
+            deletedStudentId: student.studentId,
+            department: student.department,
+            year: student.year
         });
     } catch (error) {
+        console.error('deleteStudent error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to delete student',
@@ -364,5 +587,6 @@ module.exports = {
     addStudent,
     batchAddStudents,
     uploadExcel,
+    updateStudent,
     deleteStudent
 };

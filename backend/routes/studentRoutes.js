@@ -6,7 +6,8 @@ const {
     addStudent,
     batchAddStudents,
     uploadExcel,
-    deleteStudent
+    deleteStudent,
+    updateStudent
 } = require('../controllers/studentController');
 const { protect } = require('../middleware/authMiddleware');
 const { requireRole, enforceClassScope } = require('../middleware/roleMiddleware');
@@ -32,10 +33,11 @@ const upload = multer({
 router.use(protect);
 
 router.get('/', enforceClassScope, getStudents);
-router.post('/', enforceClassScope, addStudent);
-router.post('/register', enforceClassScope, addStudent);
+router.post('/', requireRole('admin'), upload.single('photo'), addStudent);
+router.post('/register', requireRole('admin'), addStudent);
 router.post('/batch', enforceClassScope, batchAddStudents);
 router.post('/upload', upload.single('file'), enforceClassScope, uploadExcel);
-router.delete('/:id', requireRole('admin'), deleteStudent);
+router.put('/:id', requireRole('admin', 'staff'), enforceClassScope, updateStudent);
+router.delete('/:id', requireRole('admin','staff'), enforceClassScope, deleteStudent);
 
 module.exports = router;

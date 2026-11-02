@@ -7,7 +7,8 @@ const {
     logout,
     createStaff,
     listStaff,
-    updateStaff
+    updateStaff,
+    selectClass
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const { requireRole } = require('../middleware/roleMiddleware');
@@ -29,6 +30,9 @@ router.post('/login', loginLimiter, login);
 
 // Authenticated session route
 router.get('/me', protect, getMe);
+
+// Choose CS1 / CS2 / CS3 after logging in with the common staff account
+router.post('/select-class', protect, selectClass);
 
 // Logout route
 router.post('/logout', protect, logout);

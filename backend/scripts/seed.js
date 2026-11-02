@@ -11,13 +11,13 @@ const seedData = async () => {
     try {
         const uri = process.env.MONGODB_URI;
         if (!uri) {
-            console.error('❌ MONGODB_URI not found in backend/.env');
+            console.error(' MONGODB_URI not found in backend/.env');
             process.exit(1);
         }
 
         console.log('Connecting to MongoDB Atlas for initial setup/seeding...');
         await mongoose.connect(uri);
-        console.log('✅ Connected to MongoDB Atlas');
+        console.log(' Connected to MongoDB Atlas');
 
         // 1. Initial Admin User
         const adminExists = await User.findOne({ username: 'admin' });
@@ -31,13 +31,14 @@ const seedData = async () => {
                 year: 'All',
                 status: 'active'
             });
-            console.log('✅ Admin user created: admin / admin123');
+            console.log(' Admin user created: admin / admin123');
         } else {
-            console.log('ℹ️ Admin user already exists');
+            console.log('ℹ Admin user already exists');
         }
 
-        // 2. Staff Accounts (cs1, cs2, cs3)
+        // 2. Staff Accounts (common cs account plus cs1, cs2, cs3)
         const staffList = [
+            { username: 'cs', name: 'CS Staff', password: 'cs123', department: 'Computer Science', year: 'All' },
             { username: 'cs1', name: 'CS Staff (Year 1)', password: 'cs123', department: 'Computer Science', year: '1' },
             { username: 'cs2', name: 'CS Staff (Year 2)', password: 'cs123', department: 'Computer Science', year: '2' },
             { username: 'cs3', name: 'CS Staff (Year 3)', password: 'cs123', department: 'Computer Science', year: '3' }
@@ -51,9 +52,9 @@ const seedData = async () => {
                     role: 'staff',
                     status: 'active'
                 });
-                console.log(`✅ Staff user created: ${staff.username} / ${staff.password} (${staff.department} Year ${staff.year})`);
+                console.log(` Staff user created: ${staff.username} / ${staff.password} (${staff.department} Year ${staff.year})`);
             } else {
-                console.log(`ℹ️ Staff user ${staff.username} already exists`);
+                console.log(`ℹ Staff user ${staff.username} already exists`);
             }
         }
 
@@ -70,14 +71,14 @@ const seedData = async () => {
             const exists = await Student.findOne({ studentId: s.studentId, department: s.department, year: s.year });
             if (!exists) {
                 await Student.create(s);
-                console.log(`✅ Student seeded: ${s.studentId} - ${s.studentName}`);
+                console.log(` Student seeded: ${s.studentId} - ${s.studentName}`);
             }
         }
 
-        console.log('\n🎉 Initial database setup & seeding completed successfully!');
+        console.log('\n Initial database setup & seeding completed successfully!');
         process.exit(0);
     } catch (error) {
-        console.error('❌ Seeding failed:', error.message);
+        console.error(' Seeding failed:', error.message);
         process.exit(1);
     }
 };

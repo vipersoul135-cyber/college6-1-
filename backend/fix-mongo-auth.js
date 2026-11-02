@@ -66,10 +66,10 @@ JWT_EXPIRES_IN=24h`
 Object.keys(configurations).forEach(configName => {
     const fileName = `.env.${configName}`;
     fs.writeFileSync(path.join(__dirname, fileName), configurations[configName]);
-    console.log(`✅ Created ${fileName}`);
+    console.log(`Created ${fileName}`);
 });
 
-console.log('\n📋 Next Steps:');
+console.log('\n Next Steps:');
 console.log('=============');
 console.log('1. TEST LOCAL MONGODB:');
 console.log('   cp .env.local .env');

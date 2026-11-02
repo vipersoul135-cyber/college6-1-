@@ -1,5 +1,6 @@
 const Student = require('../models/Student');
 const Attendance = require('../models/Attendance');
+const { deleteFile } = require('../utils/gridFS');
 
 /**
  * @desc    Generate daily attendance report across all departments and years
@@ -285,34 +286,97 @@ const getClassStudents = async (req, res) => {
 };
 
 /**
+ * @desc    Count students and attendance records for a class (Admin Only)
+ * @route   GET /api/reports/class/summary
+ * @access  Private (Admin Only)
+ */
+const getClassSummary = async (req, res) => {
+    try {
+        const department = String(req.query.department || '').trim();
+        const rawYear = String(req.query.year || '').trim();
+
+        if (!department) {
+            return res.status(400).json({
+                success: false,
+                message: 'Department is required'
+            });
+        }
+
+        const filter = { department };
+        if (rawYear && rawYear.toLowerCase() !== 'all') {
+            filter.year = rawYear;
+        }
+
+        const [studentCount, attendanceCount] = await Promise.all([
+            Student.countDocuments(filter),
+            Attendance.countDocuments(filter)
+        ]);
+
+        res.status(200).json({
+            success: true,
+            department,
+            year: filter.year || 'All',
+            studentCount,
+            attendanceCount
+        });
+    } catch (error) {
+        console.error('getClassSummary error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to load class summary',
+            error: error.message
+        });
+    }
+};
+
+/**
  * @desc    Delete all students and attendance for a class (Admin Only)
  * @route   DELETE /api/reports/class
  * @access  Private (Admin Only)
  */
 const deleteClassData = async (req, res) => {
     try {
-        const { department, year } = req.body;
+        const body = req.body || {};
+        const department = String(body.department || '').trim();
+        const rawYear = String(body.year || '').trim();
 
-        if (!department || !year) {
+        if (!department) {
             return res.status(400).json({
                 success: false,
-                message: 'Department and Year are required to delete class data'
+                message: 'Department is required to delete class data'
             });
         }
 
-        const studentDeleteResult = await Student.deleteMany({
-            department: department.trim(),
-            year: String(year).trim()
-        });
+        // A specific year deletes that class only; "All"/empty deletes the whole department.
+        const deleteYear = rawYear && rawYear.toLowerCase() !== 'all' ? rawYear : null;
 
-        const attendanceDeleteResult = await Attendance.deleteMany({
-            department: department.trim(),
-            year: String(year).trim()
-        });
+        const filter = { department };
+        if (deleteYear) {
+            filter.year = deleteYear;
+        }
+
+        // Collect stored photos so they can be removed from GridFS too
+        const studentsToDelete = await Student.find(filter).select('photoId').lean();
+        const photoIds = studentsToDelete.map(s => s.photoId).filter(Boolean);
+
+        const studentDeleteResult = await Student.deleteMany(filter);
+        const attendanceDeleteResult = await Attendance.deleteMany(filter);
+
+        for (const photoId of photoIds) {
+            try {
+                await deleteFile(photoId);
+            } catch (photoError) {
+                console.warn('Could not delete student photo:', photoId.toString(), photoError.message);
+            }
+        }
+
+        const scopeText = deleteYear ? `${department} Year ${deleteYear}` : `${department} (all years)`;
 
         res.status(200).json({
             success: true,
-            message: `Deleted ${studentDeleteResult.deletedCount} students and ${attendanceDeleteResult.deletedCount} attendance records for ${department} Year ${year}`,
+            message: `Deleted ${studentDeleteResult.deletedCount} students and ${attendanceDeleteResult.deletedCount} attendance records for ${scopeText}`,
+            department,
+            year: deleteYear || 'All',
             deletedStudents: studentDeleteResult.deletedCount,
             deletedAttendance: attendanceDeleteResult.deletedCount
         });
@@ -330,5 +394,6 @@ module.exports = {
     getAttendanceReport,
     getClassStudents,
     deleteClassData,
+    getClassSummary,
     getDailyReport
 };

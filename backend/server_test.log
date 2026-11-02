@@ -1,0 +1,13 @@
+◇ injected env (6) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+[MongoDB] Connecting to Atlas (attempt 1)...
+[MongoDB] Connected successfully.
+[MongoDB] Host: cluster0-shard-00-00.klzogu.mongodb.net
+[MongoDB] Database: test
+
+Attendance Backend running on port 5000
+App: http://localhost:5000
+API Base: http://localhost:5000/api
+Health Check: http://localhost:5000/api/health
+Allowed CORS Origins: http://localhost:5000, http://127.0.0.1:5000
+
+Environment: development
