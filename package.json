@@ -2,10 +2,11 @@
   "name": "attendance-app",
   "version": "1.0.0",
   "description": "College Attendance System",
-  "main": "server.js",
+  "main": "backend/server.js",
   "scripts": {
-    "dev": "nodemon server.js",
-    "start": "node server.js"
+    "build": "cd backend && npm install",
+    "start": "cd backend && node server.js",
+    "dev": "cd backend && nodemon server.js"
   },
   "dependencies": {
     "exceljs": "^3.4.0",
