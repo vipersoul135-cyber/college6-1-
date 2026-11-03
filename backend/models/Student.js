@@ -38,11 +38,6 @@ const studentSchema = new mongoose.Schema(
             ref: "fs.files",
             default: null
         },
-        /** Compressed Base64 image captured from the edit form */
-        photo: {
-            type: String,
-            default: ''
-        },
         email: {
             type: String,
             trim: true,

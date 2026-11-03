@@ -4,7 +4,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
 const path = require('path');
-const fs = require('fs');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
@@ -19,27 +18,11 @@ const studentRequestRoutes = require('./routes/studentRequestRoutes');
 
 const app = express();
 
-// Security middleware.
-// The React build loads jsPDF, autoTable and xlsx from cdnjs, so that host
-// must be allowed by the Content Security Policy.
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            'default-src': ["'self'"],
-            'script-src': ["'self'", 'https://cdnjs.cloudflare.com'],
-            'style-src': ["'self'", "'unsafe-inline'"],
-            'img-src': ["'self'", 'data:', 'blob:'],
-            'font-src': ["'self'", 'data:'],
-            'connect-src': ["'self'"],
-            'object-src': ["'none'"],
-            'base-uri': ["'self'"],
-            'form-action': ["'self'"]
-        }
-    }
-}));
+// Security middleware
+app.use(helmet());
 
 // CORS configuration
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5000')
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5500')
     .split(',')
     .map(origin => origin.trim());
 
@@ -95,24 +78,6 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/student-requests', studentRequestRoutes);
 app.use('/api/student-registration-requests', studentRequestRoutes);
 
-// Serve the built React frontend so the whole app runs on one URL
-const frontendDist = path.join(__dirname, '..', 'frontend-react', 'dist');
-const frontendIndex = path.join(frontendDist, 'index.html');
-
-if (fs.existsSync(frontendIndex)) {
-    app.use(express.static(frontendDist));
-
-    // React Router fallback: send index.html for any non-API GET request
-    app.get('*', (req, res, next) => {
-        if (req.path === '/api' || req.path.startsWith('/api/')) {
-            return next();
-        }
-        res.sendFile(frontendIndex);
-    });
-} else {
-    console.warn('React build not found. Run "npm run build" inside frontend-react before starting the backend.');
-}
-
 // 404 handler
 app.use((req, res, next) => {
     res.status(404).json({
@@ -156,7 +121,6 @@ async function startServer() {
 
         app.listen(PORT, () => {
             console.log(`Attendance Backend running on port ${PORT}`);
-            console.log(`App: http://localhost:${PORT}`);
             console.log(`API Base: http://localhost:${PORT}/api`);
             console.log(`Health Check: http://localhost:${PORT}/api/health`);
             console.log(`Allowed CORS Origins: ${allowedOrigins.join(', ')}`);
@@ -166,12 +130,16 @@ async function startServer() {
     } catch (error) {
         console.error('');
         console.error('===========================================');
-        console.error('Server startup aborted: MongoDB is not available');
+        console.error('Server startup failed: MongoDB connection error');
         console.error('===========================================');
-        console.error(`Reason: ${error.message}`);
         console.error('');
-        console.error('Fix the issue described above, then start the backend again.');
-        console.error('Connection settings are read only from backend/.env.');
+        console.error('Please verify the following in MongoDB Atlas:');
+        console.error('  1. Your current IP is whitelisted in Network Access');
+        console.error('  2. Database user credentials are correct');
+        console.error('  3. The cluster is running (not paused)');
+        console.error('  4. Your network allows outbound connections to MongoDB Atlas');
+        console.error('');
+        console.error('Check your backend/.env file for MONGODB_URI configuration');
         console.error('');
         process.exit(1);
     }

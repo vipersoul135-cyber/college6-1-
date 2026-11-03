@@ -342,7 +342,8 @@ exports.getRequestById = async (req, res) => {
 
 /**
  * @desc    Approve a student registration request (Admin only)
- *          The student is added to the class roster automatically on approval.
+ *          IMPORTANT: Does NOT create the student record yet.
+ *          Grants permission to the Staff member to complete registration.
  * @route   PATCH /api/student-requests/:id/approve or PATCH /api/student-registration-requests/:id/approve
  * @access  Private (Admin only)
  */
@@ -368,64 +369,22 @@ exports.approveRequest = async (req, res) => {
             });
         }
 
-        const regNo = String(request.studentRegisterNumber || request.studentId || '').trim().toUpperCase();
-        const sDept = String(request.department || '').trim();
-        const sYear = String(request.year || request.academicYear || '').trim();
-
-        if (!regNo || !sDept || !sYear) {
-            return res.status(400).json({
-                success: false,
-                message: 'Request is missing the student register number, department or year'
-            });
-        }
-
         const adminIdentifier = req.user.username || req.user.name || req.user.id || 'Admin';
         const now = new Date();
 
-        // 2. Add the student to the class roster automatically
-        let student = await Student.findOne({
-            studentId: regNo,
-            department: sDept,
-            year: sYear
-        });
-
-        if (!student) {
-            // Place the new student after the current last student of the class
-            const highest = await Student.findOne({ department: sDept, year: sYear })
-                .sort({ serial: -1 })
-                .select('serial')
-                .lean();
-            const assignSerial = (Number(highest && highest.serial) || 0) + 1;
-
-            student = await Student.create({
-                studentName: String(request.studentName || '').trim(),
-                studentId: regNo,
-                serial: assignSerial,
-                department: sDept,
-                year: sYear,
-                phone: request.phone || '',
-                parentPhone: request.parentPhone || '',
-                status: 'active'
-            });
-        }
-
-        // 3. Mark the request approved - the student is already registered
+        // 2. Change status to 'approved' and save reviewer metadata
         request.status = 'approved';
         request.approvedBy = adminIdentifier;
         request.approvedAt = now;
         request.reviewedBy = adminIdentifier;
         request.reviewedAt = now;
-        request.adminRemarks = remarks || 'Approved by Admin. Student added automatically.';
-        request.isCompleted = true;
-        request.completedStudentId = student._id;
-        request.completedAt = now;
+        request.adminRemarks = remarks || 'Approved by Admin. Ready for Staff to complete registration.';
 
         await request.save();
 
         res.status(200).json({
             success: true,
-            message: `Request approved. Student '${student.studentName}' (${student.studentId}) was added automatically to ${sDept} Year ${sYear}.`,
-            student,
+            message: 'Registration request approved successfully! Staff may now complete registration for their class.',
             request
         });
 
@@ -593,15 +552,13 @@ exports.completeRegistration = async (req, res) => {
             });
         }
 
-        // 5. Calculate serial number - always after the current last student in the class
-        let assignSerial = Number(req.body.serial);
-        if (!assignSerial) {
-            const highest = await Student.findOne({ department: sDept, year: sYear })
-                .sort({ serial: -1 })
-                .select('serial')
-                .lean();
-            assignSerial = (Number(highest && highest.serial) || 0) + 1;
-        }
+        // 5. Calculate serial number (continue after the highest existing serial)
+        const lastStudent = await Student.findOne({ department: sDept, year: sYear })
+            .sort({ serial: -1 })
+            .select('serial')
+            .lean();
+        const assignSerial = Number(req.body.serial) ||
+            ((Number(lastStudent && lastStudent.serial) || 0) + 1);
 
         // 6. Create the student record in MongoDB
         const student = await Student.create({

@@ -90,36 +90,25 @@ const flexibleRoleCheck = (...roles) => {
     };
 };
 
-// Student registration requests are only for 1st year (CS1) staff
-const requireFirstYearStaff = (req, res, next) => {
-    if (req.user && req.user.role === 'staff' && String(req.user.year || '') !== '1') {
-        return res.status(403).json({
-            success: false,
-            message: 'Student registration requests are available only to 1st year (CS1) staff.'
-        });
-    }
-    next();
-};
-
 /**
  * @route   POST /api/student-requests or /api/student-registration-requests
  * @desc    Submit a student registration request (Staff only)
  */
-router.post('/', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, submitRequest);
+router.post('/', flexibleAuth, flexibleRoleCheck('staff'), submitRequest);
 
 /**
  * @route   GET /api/student-requests/my-requests or /my
  * @desc    Get logged-in staff's own registration requests (Staff only)
  */
-router.get('/my-requests', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, getMyRequests);
-router.get('/my', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, getMyRequests);
+router.get('/my-requests', flexibleAuth, flexibleRoleCheck('staff'), getMyRequests);
+router.get('/my', flexibleAuth, flexibleRoleCheck('staff'), getMyRequests);
 
 /**
  * @route   GET /api/student-requests/all or /
  * @desc    Get all requests with optional filters (Admin only)
  */
 router.get('/all', flexibleAuth, flexibleRoleCheck('admin'), getAllRequests);
-router.get('/', flexibleAuth, requireFirstYearStaff, (req, res, next) => {
+router.get('/', flexibleAuth, (req, res, next) => {
     // If admin, return all requests; if staff, return their own
     if (req.user && req.user.role === 'admin') {
         return getAllRequests(req, res, next);
@@ -149,12 +138,12 @@ router.patch('/:id/reject', flexibleAuth, flexibleRoleCheck('admin'), rejectRequ
  * @route   POST /api/student-requests/:id/complete-registration
  * @desc    Complete student registration after Admin approval (Staff only)
  */
-router.post('/:id/complete-registration', flexibleAuth, flexibleRoleCheck('staff'), requireFirstYearStaff, completeRegistration);
+router.post('/:id/complete-registration', flexibleAuth, flexibleRoleCheck('staff'), completeRegistration);
 
 /**
  * @route   GET /api/student-requests/:id
  * @desc    Get details for a single request
  */
-router.get('/:id', flexibleAuth, requireFirstYearStaff, getRequestById);
+router.get('/:id', flexibleAuth, getRequestById);
 
 module.exports = router;

@@ -1,4 +1,5 @@
 /* ==========================================================================
+/* ========================================================
    script.js - College Attendance System (Local & API Support)
    Handles Login, Home Dashboard, Attendance Entry, and Reports locally
    Default Staff: cs3 / cs123 -> Computer Science, Year 3
@@ -8,6 +9,14 @@ const BASE_URL = 'http://localhost:5000/api';
 
 // Pre-configured local accounts
 const LOCAL_USERS = [
+    {
+        username: "cs",
+        password: "cs123",
+        name: "CS Staff",
+        role: "staff",
+        department: "Computer Science",
+        year: "All"
+    },
     {
         username: "cs3",
         password: "cs123",
@@ -60,12 +69,42 @@ const DEFAULT_CS3_STUDENTS = [
  * Initialize default local students in localStorage if none exist
  */
 function initializeLocalStudents() {
+    // When signed in through the backend, MongoDB is the source of truth.
+    // Seeding demo students here would bring deleted students back into the UI.
+    const token = localStorage.getItem("token");
+    if (token && !token.startsWith("local-token-")) {
+        return;
+    }
+
     let students = JSON.parse(localStorage.getItem("students")) || [];
     const cs3Exists = students.some(s => s.department === "Computer Science" && String(s.year) === "3");
 
     if (!cs3Exists) {
         students = students.concat(DEFAULT_CS3_STUDENTS);
         localStorage.setItem("students", JSON.stringify(students));
+    }
+}
+
+/**
+ * Load students from backend API for current user's department and year
+ */
+async function loadStudentsFromBackend() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+        const res = await fetch(`${BASE_URL}/students`, {
+            headers: { Authorization: "Bearer " + token }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            // Replace the cache even when empty so deleted students disappear
+            if (Array.isArray(data.students)) {
+                localStorage.setItem("students", JSON.stringify(data.students));
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load students from backend:", e);
     }
 }
 
@@ -137,7 +176,18 @@ async function login() {
                 localStorage.setItem("department", result.user.department || "");
                 localStorage.setItem("year", result.user.year || "");
 
-                initializeLocalStudents();
+                // The common staff account must choose CS1 / CS2 / CS3 first
+                const needsClassSelection = result.user.role === "staff" &&
+                    (!result.user.year || result.user.year === "All");
+
+                if (needsClassSelection) {
+                    // Avoid leaking a previous class roster into the selection page
+                    localStorage.removeItem("students");
+                } else {
+                    // Load students from backend for this user's department and year
+                    initializeLocalStudents();
+                    await loadStudentsFromBackend();
+                }
 
                 if (msgEl) {
                     msgEl.style.color = "#86efac";
@@ -147,6 +197,8 @@ async function login() {
                 setTimeout(() => {
                     if (result.user.role === "admin") {
                         window.location.href = "admin.html";
+                    } else if (needsClassSelection) {
+                        window.location.href = "class-selection.html";
                     } else {
                         window.location.href = "home.html";
                     }
@@ -180,7 +232,16 @@ async function login() {
         localStorage.setItem("department", userObj.department);
         localStorage.setItem("year", userObj.year);
 
-        initializeLocalStudents();
+        const needsClassSelection = userObj.role === "staff" &&
+            (!userObj.year || userObj.year === "All");
+
+        if (needsClassSelection) {
+            localStorage.removeItem("students");
+        } else {
+            // Load students from backend if available
+            initializeLocalStudents();
+            await loadStudentsFromBackend();
+        }
 
         if (msgEl) {
             msgEl.style.color = "#86efac";
@@ -190,6 +251,8 @@ async function login() {
         setTimeout(() => {
             if (userObj.role === "admin") {
                 window.location.href = "admin.html";
+            } else if (needsClassSelection) {
+                window.location.href = "class-selection.html";
             } else {
                 window.location.href = "home.html";
             }
@@ -220,33 +283,18 @@ function loadHomeDashboard() {
         return;
     }
 
+    // Common staff account has no class yet
+    if (user.role === "staff" && (!user.year || user.year === "All")) {
+        window.location.href = "class-selection.html";
+        return;
+    }
+
     if (userInfoEl) {
         const dept = user.department || "Computer Science";
         const year = user.year || "3";
         userInfoEl.innerHTML = `
-            Welcome, <strong>${user.name || user.username}</strong><br>
-            <span style="font-size: 16px; opacity: 0.9; font-weight: normal; color: #e2e8f0;">
-                Assigned Class: <strong>${dept} - Year ${year}</strong>
-            </span>
+            Welcome, <strong>${dept} - Year ${year}</strong><br>
         `;
-    }
-
-    // Show Bulk Upload and View Students Data buttons ONLY for cs1 staff (Computer Science, Year 1)
-    const bulkUploadContainer = document.getElementById("bulkUploadContainer");
-    const viewStudentsContainer = document.getElementById("viewStudentsContainer");
-    
-    if (bulkUploadContainer) {
-        const isCs1Staff = user.username === "cs1" && 
-                          (user.department === "Computer Science" || user.department === "Computer Science") && 
-                          user.year === "1";
-        bulkUploadContainer.style.display = isCs1Staff ? "block" : "none";
-    }
-    
-    if (viewStudentsContainer) {
-        const isCs1Staff = user.username === "cs1" && 
-                          (user.department === "Computer Science" || user.department === "Computer Science") && 
-                          user.year === "1";
-        viewStudentsContainer.style.display = isCs1Staff ? "block" : "none";
     }
 }
 
@@ -288,6 +336,11 @@ async function renderAttendance() {
         return;
     }
 
+    if (user.role === "staff" && (!user.year || user.year === "All")) {
+        window.location.href = "class-selection.html";
+        return;
+    }
+
     // Display assigned class banner if container exists
     let classBanner = document.getElementById("classBanner");
     if (!classBanner) {
@@ -309,6 +362,14 @@ async function renderAttendance() {
 
     const dateInput = document.getElementById("attendanceDate");
     if (!dateInput) return;
+
+    // Restrict date input for staff - only admin can change dates
+    if (user.role === 'staff') {
+        dateInput.disabled = true;
+        dateInput.title = "Date is fixed for staff - only admin can change dates";
+    } else {
+        dateInput.disabled = false;
+    }
 
     let date = dateInput.value;
     if (!date) {
@@ -554,6 +615,12 @@ async function submitAttendance() {
 // ==========================================================================
 function initReport() {
     const user = getCurrentUser();
+
+    if (user && user.role === "staff" && (!user.year || user.year === "All")) {
+        window.location.href = "class-selection.html";
+        return;
+    }
+
     const deptEl = document.getElementById("reportDepartment");
     const yearEl = document.getElementById("reportYear");
 
@@ -724,7 +791,7 @@ function downloadReport() {
 // ==========================================================================
 // 5. DOM CONTENT LOADED - PAGE ROUTER
 // ==========================================================================
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     initializeLocalStudents();
 
     // If on index.html
@@ -749,11 +816,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if (dateInput && !dateInput.value) {
             dateInput.value = new Date().toISOString().split("T")[0];
         }
+        // Refresh from MongoDB first so deleted students never remain on screen
+        await loadStudentsFromBackend();
         renderAttendance();
     }
 
     // If on report.html
     if (document.getElementById("reportDepartment") && document.getElementById("reportYear")) {
+        await loadStudentsFromBackend();
         initReport();
     }
 });

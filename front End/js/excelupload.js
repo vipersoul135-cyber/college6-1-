@@ -71,10 +71,10 @@ document.addEventListener("DOMContentLoaded", () => {
                         (keys[2] !== undefined ? row[keys[2]] : keys[1] !== undefined ? row[keys[1]] : "") || ""
                     ).trim();
 
-                    // Serial number
+                    // Serial number (left empty so the server assigns the next free one)
                     const serialVal = row["serial number"] || row["Serial Number"] ||
-                                      row["S.No"] || row["sno"] || row["Sno"] || (index + 1);
-                    const serial = Number(serialVal) || (index + 1);
+                                      row["S.No"] || row["sno"] || row["Sno"] || row["S No"] || "";
+                    const serial = Number(serialVal) || null;
 
                     // Optional fields - case-insensitive matching
                     const email = row["email"] || row["Email"] || row["EMAIL"] || "";
@@ -107,7 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     });
 
                     preview += `<tr>
-                        <td>${serial}</td>
+                        <td>${serial !== null ? serial : (index + 1)}</td>
                         <td>${id}</td>
                         <td>${name}</td>
                         <td>${email}</td>

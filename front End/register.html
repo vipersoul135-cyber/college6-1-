@@ -128,7 +128,7 @@
 
 <body>
     <header class="header">
-        <img src="img/logo.png" alt="Logo" class="logo">
+        <img src="logo.png" alt="Logo" class="logo">
         <h2 class="center" style="padding-left: 35%;">College Attendance System</h2>
     </header>
 
@@ -289,8 +289,9 @@
         }
 
         // Create student object
+        const nextSerial = existingStudents.reduce((max, s) => Math.max(max, Number(s.serial) || 0), 0) + 1;
         const student = {
-            serial: existingStudents.length + 1,
+            serial: nextSerial,
             studentId: studentId,
             studentName: studentName,
             id: studentId, // For compatibility

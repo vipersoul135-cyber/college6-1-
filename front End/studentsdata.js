@@ -3,6 +3,7 @@
    ======================================================== */
 
 let currentUser = null;
+const BASE_URL = 'http://localhost:5000/api';
 let students = [];
 let attendance = [];
 let selectedDepartment = "";
@@ -10,10 +11,10 @@ let filteredStudents = [];
 
 // Department data with icons
 const departments = {
-    "Computer Science": { icon: "💻", name: "Computer Science" },
+    "Computer Science": { icon: "", name: "Computer Science" },
     "Information Technology": { icon: "🌐", name: "Information Technology" },
-    "Tamil": { icon: "📚", name: "Tamil" },
-    "English": { icon: "📖", name: "English" }
+    "Tamil": { icon: "", name: "Tamil" },
+    "English": { icon: "", name: "English" }
 };
 
 /**
@@ -42,6 +43,20 @@ function canEditStudents() {
 }
 
 /**
+ * CS1 staff can delete a single student from their own class.
+ */
+function canDeleteStudents() {
+    return currentUser && currentUser.role === "staff" && currentUser.username === "cs1";
+}
+
+/**
+ * Admin removes students in bulk (whole class) instead of one by one.
+ */
+function canBulkDeleteStudents() {
+    return currentUser && currentUser.role === "admin";
+}
+
+/**
  * Load and display user info
  */
 function loadUserInfo() {
@@ -67,10 +82,10 @@ function loadUserInfo() {
         if (departmentSelectionTitle) departmentSelectionTitle.textContent = "Select Department to View & Edit Students:";
     } else if (currentUser && currentUser.role === "admin") {
         if (pageTitle) {
-            pageTitle.innerHTML = `Students Data <span style="display: inline-block; font-size: 13px; font-weight: 600; background: #0284c7; color: white; padding: 4px 12px; border-radius: 12px; margin-left: 8px;">👁️ Admin (View Only)</span>`;
+            pageTitle.innerHTML = `Students Data <span style="display: inline-block; font-size: 13px; font-weight: 600; background: #0284c7; color: white; padding: 4px 12px; border-radius: 12px; margin-left: 8px;">🛠️ Admin (Delete Whole Class)</span>`;
         }
         backToAdminBtns.forEach(btn => btn.textContent = "Back to Admin Panel");
-        if (departmentSelectionTitle) departmentSelectionTitle.textContent = "Select Department to View Students (Read-Only):";
+        if (departmentSelectionTitle) departmentSelectionTitle.textContent = "Select Department to View & Delete Students:";
     } else {
         if (pageTitle) {
             pageTitle.innerHTML = `Students Data <span style="display: inline-block; font-size: 13px; font-weight: 600; background: #64748b; color: white; padding: 4px 12px; border-radius: 12px; margin-left: 8px;">👁️ View Only</span>`;
@@ -78,14 +93,55 @@ function loadUserInfo() {
         backToAdminBtns.forEach(btn => btn.textContent = "Back to Dashboard");
         if (departmentSelectionTitle) departmentSelectionTitle.textContent = "Select Department to View Students:";
     }
+
+    const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
+    if (bulkDeleteBtn) {
+        bulkDeleteBtn.style.display = canBulkDeleteStudents() ? "inline-block" : "none";
+    }
 }
 
 /**
  * Load data from localStorage
  */
-function loadData() {
-    students = JSON.parse(localStorage.getItem("students")) || [];
-    attendance = JSON.parse(localStorage.getItem("attendance")) || [];
+async function loadData() {
+    // Fetch latest data from backend if authenticated, otherwise fallback to localStorage
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            const [studentsRes, attendanceRes] = await Promise.all([
+                fetch(`${BASE_URL}/students`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                fetch(`${BASE_URL}/attendance`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            ]);
+            const studentsData = await studentsRes.json();
+            const attendanceData = await attendanceRes.json();
+            if (studentsData.success && Array.isArray(studentsData.students)) {
+                students = studentsData.students;
+            } else {
+                console.warn('Failed to fetch students from API, using localStorage');
+                students = JSON.parse(localStorage.getItem('students')) || [];
+            }
+            if (attendanceData.success && Array.isArray(attendanceData.records)) {
+                attendance = attendanceData.records;
+            } else {
+                console.warn('Failed to fetch attendance from API, using localStorage');
+                attendance = JSON.parse(localStorage.getItem('attendance')) || [];
+            }
+        } catch (err) {
+            console.error('Error fetching data from API:', err);
+            students = JSON.parse(localStorage.getItem('students')) || [];
+            attendance = JSON.parse(localStorage.getItem('attendance')) || [];
+        }
+    } else {
+        // No token – fall back to localStorage (e.g., during development)
+        students = JSON.parse(localStorage.getItem('students')) || [];
+        attendance = JSON.parse(localStorage.getItem('attendance')) || [];
+    }
 }
 
 /**
@@ -262,18 +318,30 @@ function displayStudentsTable() {
         }
 
         const isEditable = canEditStudents();
+        const isDeletable = canDeleteStudents();
         let actionCellHTML = "";
 
-        if (isEditable) {
-            actionCellHTML = `
-                <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
+        if (isEditable || isDeletable) {
+            const editButton = isEditable ? `
                     <button style="background-color: #f59e0b; color: white; padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer;" onclick='openEditStudentModal(${JSON.stringify(student).replace(/'/g, "&#39;")})'>
                         ✏️ Edit
-                    </button>
-                    <button class="red" style="padding: 5px 10px; font-size: 12px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer;" onclick="deleteSingleStudent('${studentId}', '${studentName}')">
+                    </button>` : '';
+            const deleteButton = isDeletable ? `
+                    <button class="red" style="padding: 5px 10px; font-size: 12px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer;" onclick="deleteSingleStudent('${studentId}', '${studentName}', '${student.department}', '${student.year}')">
                         🗑️ Delete
-                    </button>
+                    </button>` : '';
+
+            actionCellHTML = `
+                <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                    ${editButton}
+                    ${deleteButton}
                 </div>
+            `;
+        } else if (canBulkDeleteStudents()) {
+            actionCellHTML = `
+                <span style="color: #fecaca; font-size: 12px; font-style: italic; background: rgba(220,38,38,0.25); padding: 4px 10px; border-radius: 4px; display: inline-block;">
+                    Use “Delete All Students” above
+                </span>
             `;
         } else {
             actionCellHTML = `
@@ -396,20 +464,25 @@ function viewStudentDetails(student) {
             </div>
         </div>
     `;
-
-    // Add action button for CS1 Staff or View-Only notice for Admin
+    
+    // Add action buttons based on permission
     if (canEditStudents()) {
         detailsContainer.innerHTML += `
-            <div style="width: 100%; margin-top: 25px; text-align: center; border-top: 1px solid rgba(255,255,255,0.25); padding-top: 15px;">
-                <button onclick='closeStudentModal(); openEditStudentModal(${JSON.stringify(student).replace(/'/g, "&#39;")});' style="background-color: #f59e0b; color: white; padding: 10px 24px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                    ✏️ Edit This Student
-                </button>
+            <div style="width:100%; margin-top:25px; text-align:center; border-top:1px solid rgba(255,255,255,0.25); padding-top:15px;">
+                <button onclick="openEditStudentModal(${JSON.stringify(student).replace(/'/g, "&#39;")});" style="background-color:#f59e0b;color:white;padding:8px 16px;margin-right:8px;border:none;border-radius:4px;cursor:pointer;">✏️ Edit</button>
+                <button onclick="deleteSingleStudent('${studentId}', '${studentName}', '${student.department}', '${student.year}');" style="background-color:#dc2626;color:white;padding:8px 16px;border:none;border-radius:4px;cursor:pointer;">🗑️ Delete</button>
+            </div>
+        `;
+    } else if (canBulkDeleteStudents()) {
+        detailsContainer.innerHTML += `
+            <div style="width:100%; margin-top:25px; text-align:center; border-top:1px solid rgba(255,255,255,0.25); padding-top:15px;">
+                <div style="color:#fecaca; font-size:13px; font-style:italic;">Admin deletes a whole class at once. Close this window and use the “Delete All Students” button above.</div>
             </div>
         `;
     } else {
         detailsContainer.innerHTML += `
-            <div style="width: 100%; margin-top: 20px; text-align: center; color: #cbd5e1; font-size: 13px; font-style: italic; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
-                👁️ Admin / View Only Access: Student records cannot be edited by admin. Only CS1 staff can edit.
+            <div style="width:100%; margin-top:20px; text-align:center; color:#cbd5e1; font-size:13px; font-style:italic; border-top:1px solid rgba(255,255,255,0.2); padding-top:15px;">
+                👁️ View Only Access: Only Admin and CS1 staff can delete student records.
             </div>
         `;
     }
@@ -678,43 +751,124 @@ window.onclick = function(event) {
 /**
  * Delete a single student (CS1 Staff Only)
  */
-function deleteSingleStudent(studentId, studentName) {
-    if (!canEditStudents()) {
-        alert("Access denied: Admin has view-only access. Only CS1 staff is authorized to delete students.");
+async function deleteSingleStudent(studentId, studentName, department, year) {
+    if (!canDeleteStudents()) {
+        alert("Access denied: Only Admin and CS1 staff are authorized to delete students.");
         return;
     }
 
-    if (!confirm(`Are you sure you want to delete student:\n\n• Name: ${studentName}\n• ID: ${studentId}\n\nThis will also remove their attendance records.`)) {
+    if (!confirm(`Are you sure you want to delete student:\n\n• Name: ${studentName}\n• ID: ${studentId}\n• Class: ${department} - Year ${year}\n\nThis will also remove their attendance records.`)) {
         return;
     }
 
-    loadData();
-
-    // Remove student
-    const initialStudentCount = students.length;
-    students = students.filter(s => 
-        String(s.id).trim().toLowerCase() !== String(studentId).trim().toLowerCase()
-    );
-
-    // Remove attendance records
-    const initialAttendanceCount = attendance.length;
-    attendance = attendance.filter(a => 
-        String(a.id).trim().toLowerCase() !== String(studentId).trim().toLowerCase()
-    );
-
-    saveData();
-
-    const deletedStudents = initialStudentCount - students.length;
-    const deletedAttendance = initialAttendanceCount - attendance.length;
-
-    if (deletedStudents > 0) {
-        alert(`Student ${studentName} (${studentId}) deleted successfully.\nAttendance records removed: ${deletedAttendance}`);
-        // Reload the current view
-        loadStudentsForDepartment();
-        // Update department cards count
-        generateDepartmentCards();
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            const scopeQuery = `department=${encodeURIComponent(department || '')}&year=${encodeURIComponent(year || '')}`;
+            const response = await fetch(`${BASE_URL}/students/${encodeURIComponent(studentId)}?${scopeQuery}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (response.ok && data.success) {
+                alert(`✅ ${data.message}`);
+                // Close the details modal if open
+                closeStudentModal();
+                // Reload from backend
+                await loadData();
+                generateDepartmentCards();
+                if (selectedDepartment) {
+                    loadStudentsForDepartment();
+                }
+            } else {
+                alert(`❌ Failed to delete: ${data.message || 'Unknown error'}`);
+            }
+        } catch (err) {
+            console.error('Delete student error:', err);
+            alert(`❌ Network error: ${err.message}`);
+        }
     } else {
-        alert("Error: Student not found.");
+        alert('Authentication required. Please log in again.');
+    }
+}
+
+/**
+ * Delete every student of the selected class (department + year) from MongoDB.
+ * Admin only. Attendance records and photos are removed with the students.
+ */
+async function deleteAllClassStudents() {
+    if (!canBulkDeleteStudents()) {
+        alert("Access denied: only the Admin can delete a whole class.");
+        return;
+    }
+
+    if (!selectedDepartment) {
+        alert("Please select a department first.");
+        return;
+    }
+
+    await loadData();
+    loadStudentsForDepartment();
+
+    const yearFilter = document.getElementById("dataYear").value.trim();
+    const yearText = yearFilter ? `Year ${yearFilter}` : "ALL YEARS";
+    const targets = filteredStudents;
+
+    if (targets.length === 0) {
+        alert("No students found for the selected class.");
+        return;
+    }
+
+    const confirmMsg1 = `⚠️ WARNING: This permanently deletes:\n\n` +
+        `• Department: ${selectedDepartment}\n` +
+        `• Year: ${yearText}\n` +
+        `• Total Students: ${targets.length}\n\n` +
+        `All student records and attendance history will be removed from the DATABASE.\n\n` +
+        `Do you want to continue?`;
+
+    if (!confirm(confirmMsg1)) return;
+
+    const confirmMsg2 = `FINAL CONFIRMATION:\n\n` +
+        `Delete ALL ${targets.length} students of ${selectedDepartment} (${yearText})?\n\n` +
+        `This action CANNOT be undone!`;
+
+    if (!confirm(confirmMsg2)) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+        alert("Authentication required. Please log in again.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${BASE_URL}/reports/class`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ department: selectedDepartment, year: yearFilter || 'All' })
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || !data.success) {
+            alert(`❌ Failed to delete class: ${data.message || 'Unknown error'}`);
+            return;
+        }
+
+        // Refresh from MongoDB so the table, cards and cache all agree
+        await loadData();
+        saveData();
+        generateDepartmentCards();
+        loadStudentsForDepartment();
+
+        alert(`✅ Deletion completed.\n\n` +
+            `• Students deleted: ${data.deletedStudents}\n` +
+            `• Attendance records deleted: ${data.deletedAttendance}`);
+    } catch (err) {
+        console.error('Bulk delete error:', err);
+        alert(`❌ Network error: ${err.message}`);
     }
 }
 
@@ -861,9 +1015,9 @@ function goBackToAdmin() {
 /**
  * Initialize page when DOM is loaded
  */
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", async function() {
     loadUserInfo();
-    loadData();
+    await loadData();
     
     // Set page title based on user role
     const pageTitle = document.getElementById("pageTitle");
@@ -872,6 +1026,14 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     
     generateDepartmentCards();
+    
+    // Auto-select user's department for staff users
+    if (currentUser && currentUser.role === "staff" && currentUser.department) {
+        const deptKey = currentUser.department;
+        if (departments[deptKey]) {
+            selectDepartmentFromDropdown(deptKey);
+        }
+    }
 });
 
 /**

@@ -10,7 +10,7 @@
 
 <body>
     <header class="header">
-        <img src="img/logo.png" alt="Logo" class="logo" onerror="this.src='logo.png'">
+        <img src="logo.png" alt="Logo" class="logo" onerror="this.src='logo.png'">
         <h2 class="center" style="padding-left: 35%;">College Attendance System</h2>
     </header>
 
@@ -20,7 +20,7 @@
 
         <div class="center" style="margin-bottom: 15px;">
             <label for="attendanceDate" style="margin-right: 8px; font-weight: 600;">Date:</label>
-            <input type="date" id="attendanceDate" onchange="renderAttendance()">
+            <input type="date" id="attendanceDate" onchange="renderAttendance()" disabled title="Date fixed for staff - only admin can change dates">
             <div id="attendanceStats"></div>
         </div>
 

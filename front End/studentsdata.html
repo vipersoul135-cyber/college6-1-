@@ -478,7 +478,7 @@
 
 <body>
     <header class="header">
-        <img src="img/logo.png" alt="Logo" class="logo">
+        <img src="logo.png" alt="Logo" class="logo">
         <h2 class="center" style="padding-left: 35%;">College Attendance System</h2>
     </header>
 
@@ -516,6 +516,7 @@
                     </select>
                     <button onclick="applyYearFilter()">Apply Filter</button>
                     <button onclick="downloadStudentsData()" style="background-color: #28a745;">Download Data</button>
+                    <button id="bulkDeleteBtn" onclick="deleteAllClassStudents()" class="red" style="display: none; background-color: #dc2626;">🗑️ Delete All Students</button>
                 </div>
             </div>
 

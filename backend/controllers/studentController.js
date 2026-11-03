@@ -80,14 +80,14 @@ const addStudent = async (req, res) => {
             });
         }
 
-        // Auto-assign serial if not provided - always after the current last student
+        // Auto-assign serial if not provided (continue after the highest existing serial)
         let assignSerial = serial;
         if (!assignSerial) {
-            const highest = await Student.findOne({ department: targetDept, year: targetYear })
+            const lastStudent = await Student.findOne({ department: targetDept, year: targetYear })
                 .sort({ serial: -1 })
                 .select('serial')
                 .lean();
-            assignSerial = (Number(highest && highest.serial) || 0) + 1;
+            assignSerial = (Number(lastStudent && lastStudent.serial) || 0) + 1;
         }
 
         const student = await Student.create({
@@ -133,6 +133,12 @@ const batchAddStudents = async (req, res) => {
         const targetDept = (req.user.role === 'staff') ? req.user.department : (department || req.user.department);
         const targetYear = (req.user.role === 'staff' && req.user.year !== 'All') ? req.user.year : (year || '1');
 
+        const lastStudent = await Student.findOne({ department: targetDept, year: targetYear })
+            .sort({ serial: -1 })
+            .select('serial')
+            .lean();
+        let nextSerial = (Number(lastStudent && lastStudent.serial) || 0) + 1;
+
         let createdCount = 0;
         let updatedCount = 0;
 
@@ -140,7 +146,6 @@ const batchAddStudents = async (req, res) => {
             const item = students[i];
             const sId = String(item.id || item.studentId || '').trim().toUpperCase();
             const sName = String(item.name || item.studentName || 'Unknown').trim();
-            const sSerial = Number(item.serial) || (i + 1);
 
             if (!sId && !sName) continue;
 
@@ -149,6 +154,13 @@ const batchAddStudents = async (req, res) => {
                 department: targetDept,
                 year: targetYear
             };
+
+            // Keep the existing serial when the sheet has no serial column
+            let sSerial = Number(item.serial);
+            if (!sSerial) {
+                const existingStudent = await Student.findOne(filter).select('serial').lean();
+                sSerial = Number(existingStudent && existingStudent.serial) || nextSerial++;
+            }
 
             const update = {
                 studentName: sName,
@@ -235,6 +247,12 @@ const uploadExcel = async (req, res) => {
             });
         }
 
+        const lastStudent = await Student.findOne({ department: targetDept, year: targetYear })
+            .sort({ serial: -1 })
+            .select('serial')
+            .lean();
+        let nextSerial = (Number(lastStudent && lastStudent.serial) || 0) + 1;
+
         let savedCount = 0;
 
         for (let i = 0; i < rows.length; i++) {
@@ -274,13 +292,24 @@ const uploadExcel = async (req, res) => {
             const photo = row['photo'] || row['Photo'] || row['PHOTO'] || row['photo_url'] || row['Photo URL'] || '';
 
             const serialVal = row['serial number'] || row['Serial Number'] ||
-                              row['S.No'] || row['sno'] || row['Sno'] || (i + 1);
+                              row['S.No'] || row['sno'] || row['Sno'] || row['S No'] || '';
+            const parsedSerial = Number(serialVal);
 
             if (!id && !name) continue;
 
+            let serialValue = parsedSerial;
+            if (!serialValue) {
+                const existingStudent = await Student.findOne({
+                    studentId: id || `STU${i + 1}`,
+                    department: targetDept,
+                    year: targetYear
+                }).select('serial').lean();
+                serialValue = Number(existingStudent && existingStudent.serial) || nextSerial++;
+            }
+
             const updateData = {
                 studentName: name || 'Unknown',
-                serial: Number(serialVal) || (i + 1),
+                serial: serialValue,
                 status: 'active'
             };
 
@@ -321,181 +350,6 @@ const uploadExcel = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to process Excel file',
-            error: error.message
-        });
-    }
-};
-
-/**
- * @desc    Update a student's details
- * @route   PUT /api/students/:id
- * @access  Private (Staff restricted to their selected class, Admin unrestricted)
- */
-const updateStudent = async (req, res) => {
-    try {
-        const identifier = String(req.params.id || '').trim();
-        const body = req.body || {};
-        const requestedDept = String(req.query.department || body.department || '').trim();
-        const requestedYear = String(req.query.year || body.year || '').trim();
-
-        const filter = identifier.match(/^[0-9a-fA-F]{24}$/)
-            ? { _id: identifier }
-            : { studentId: identifier.toUpperCase() };
-
-        if (req.user.role === 'staff') {
-            if (!req.user.year || req.user.year === 'All') {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Please select a class (CS1, CS2 or CS3) first'
-                });
-            }
-            filter.department = req.user.department;
-            filter.year = String(req.user.year);
-        } else {
-            if (requestedDept) filter.department = requestedDept;
-            if (requestedYear) filter.year = requestedYear;
-        }
-
-        const matches = await Student.find(filter).limit(2);
-
-        if (matches.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Student not found in the selected class'
-            });
-        }
-
-        if (matches.length > 1) {
-            return res.status(409).json({
-                success: false,
-                message: 'This register number exists in more than one class. Specify department and year to update the correct record.'
-            });
-        }
-
-        const student = matches[0];
-
-        const studentName = String(body.studentName ?? body.name ?? student.studentName).trim();
-        const studentId = String(body.studentId ?? body.id ?? student.studentId).trim().toUpperCase();
-        const department = String(body.department || student.department).trim();
-        const year = String(body.year || student.year).trim();
-
-        if (!studentName || !studentId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Student name and Register Number/ID are required'
-            });
-        }
-
-        if (
-            req.user.role === 'staff' &&
-            (department.toLowerCase() !== req.user.department.trim().toLowerCase() ||
-                year !== String(req.user.year))
-        ) {
-            return res.status(403).json({
-                success: false,
-                message: 'You can only edit students in your selected class'
-            });
-        }
-
-        const classChanged = department !== student.department || year !== student.year;
-
-        const duplicate = await Student.findOne({
-            _id: { $ne: student._id },
-            studentId,
-            department,
-            year
-        });
-
-        if (duplicate) {
-            return res.status(409).json({
-                success: false,
-                message: `A student with Register Number '${studentId}' already exists in ${department} Year ${year}`
-            });
-        }
-
-        const updates = { studentName, studentId, department, year };
-
-        for (const field of ['email', 'phone', 'parentName', 'parentPhone', 'address', 'photo']) {
-            if (body[field] !== undefined) {
-                updates[field] = String(body[field] || '').trim();
-            }
-        }
-
-        if (body.status !== undefined) {
-            updates.status = body.status === 'inactive' ? 'inactive' : 'active';
-        }
-
-        if (body.dateOfBirth !== undefined) {
-            const rawDob = String(body.dateOfBirth || '').trim();
-            if (!rawDob) {
-                updates.dateOfBirth = null;
-            } else {
-                const parsedDob = new Date(rawDob);
-                if (Number.isNaN(parsedDob.getTime())) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Date of birth is not a valid date'
-                    });
-                }
-                updates.dateOfBirth = parsedDob;
-            }
-        }
-
-        if (classChanged) {
-            const highest = await Student.findOne({ department, year })
-                .sort({ serial: -1 })
-                .select('serial')
-                .lean();
-            updates.serial = (Number(highest && highest.serial) || 0) + 1;
-        }
-
-        const updatedStudent = await Student.findByIdAndUpdate(
-            student._id,
-            { $set: updates },
-            { new: true, runValidators: true }
-        );
-
-        const identityChanged =
-            studentId !== student.studentId ||
-            classChanged ||
-            studentName !== student.studentName;
-
-        if (identityChanged) {
-            try {
-                await Attendance.updateMany(
-                    {
-                        studentId: student.studentId,
-                        department: student.department,
-                        year: student.year
-                    },
-                    { $set: { studentId, studentName, department, year } }
-                );
-                await Attendance.updateMany(
-                    { student: student._id },
-                    { $set: { studentId, studentName, department, year } }
-                );
-            } catch (syncError) {
-                console.warn('Attendance sync after student update failed:', syncError.message);
-            }
-        }
-
-        res.status(200).json({
-            success: true,
-            message: `Student ${studentName} (${studentId}) updated successfully`,
-            student: updatedStudent
-        });
-    } catch (error) {
-        if (error && error.code === 11000) {
-            return res.status(409).json({
-                success: false,
-                message: 'Another student already uses this Register Number in the selected class'
-            });
-        }
-
-        console.error('updateStudent error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update student',
             error: error.message
         });
     }
@@ -587,6 +441,5 @@ module.exports = {
     addStudent,
     batchAddStudents,
     uploadExcel,
-    updateStudent,
     deleteStudent
 };

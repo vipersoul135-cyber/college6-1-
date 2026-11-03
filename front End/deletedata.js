@@ -3,6 +3,7 @@
    ======================================================== */
 
 let currentUser = null;
+const BASE_URL = 'http://localhost:5000/api';
 let students = [];
 let attendance = [];
 
@@ -37,11 +38,50 @@ function loadAdminInfo() {
 }
 
 /**
- * Load data from localStorage
+ * Load the latest class data from MongoDB (fallback to localStorage)
  */
-function loadData() {
-    students = JSON.parse(localStorage.getItem("students")) || [];
-    attendance = JSON.parse(localStorage.getItem("attendance")) || [];
+async function loadData() {
+    const token = localStorage.getItem("token");
+    let fromBackend = false;
+
+    if (token) {
+        try {
+            const [studentsRes, attendanceRes] = await Promise.all([
+                fetch(`${BASE_URL}/students`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                fetch(`${BASE_URL}/attendance`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            ]);
+
+            if (studentsRes.ok) {
+                const data = await studentsRes.json();
+                if (Array.isArray(data.students)) {
+                    students = data.students;
+                    localStorage.setItem("students", JSON.stringify(students));
+                    fromBackend = true;
+                }
+            }
+
+            if (attendanceRes.ok) {
+                const aData = await attendanceRes.json();
+                if (Array.isArray(aData.records)) {
+                    attendance = aData.records;
+                }
+            }
+        } catch (e) {
+            console.warn('Unable to load data from backend, using local cache');
+        }
+    }
+
+    if (!fromBackend) {
+        students = JSON.parse(localStorage.getItem("students")) || [];
+    }
+
+    if (!Array.isArray(attendance) || attendance.length === 0) {
+        attendance = JSON.parse(localStorage.getItem("attendance")) || [];
+    }
 }
 
 /**
@@ -55,7 +95,7 @@ function saveData() {
 /**
  * Preview students that will be deleted
  */
-function previewStudents() {
+async function previewStudents() {
     const deptSelect = document.getElementById("deleteDepartment");
     const yearSelect = document.getElementById("deleteYear");
     const previewSection = document.getElementById("previewSection");
@@ -81,7 +121,7 @@ function previewStudents() {
         return;
     }
 
-    loadData();
+    await loadData();
 
     // Filter students by department and year
     const filteredStudents = students.filter(s =>
@@ -98,21 +138,43 @@ function previewStudents() {
 
     // Display student list
     let html = "<ul style='margin: 0; padding-left: 20px;'>";
-    filteredStudents.forEach((student, index) => {
-        html += `<li><strong>${student.name}</strong> (ID: ${student.id}) - ${student.department} Year ${student.year}</li>`;
+    filteredStudents.forEach((student) => {
+        const regNo = student.studentId || student.id || "N/A";
+        const fullName = student.studentName || student.name || "Unknown";
+        html += `<li><strong>${fullName}</strong> (ID: ${regNo}) - ${student.department} Year ${student.year}</li>`;
     });
     html += "</ul>";
 
     previewDiv.innerHTML = html;
-    
-    // Display statistics
-    const attendanceRecords = attendance.filter(a => 
-        filteredStudents.some(s => String(s.id).trim().toLowerCase() === String(a.id).trim().toLowerCase())
-    );
+
+    // Count attendance records that belong to this class
+    let attendanceCount = attendance.filter(a =>
+        String(a.department || "").trim().toLowerCase() === selectedDept.toLowerCase() &&
+        String(a.year || "").trim() === String(selectedYear)
+    ).length;
+
+    // The attendance API is per-date, so use the MongoDB summary when available
+    try {
+        const token = localStorage.getItem("token");
+        if (token) {
+            const summaryRes = await fetch(
+                `${BASE_URL}/reports/class/summary?department=${encodeURIComponent(selectedDept)}&year=${encodeURIComponent(selectedYear)}`,
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            if (summaryRes.ok) {
+                const summary = await summaryRes.json();
+                if (summary.success && Number.isFinite(summary.attendanceCount)) {
+                    attendanceCount = summary.attendanceCount;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Unable to load class summary from backend');
+    }
 
     statsDiv.innerHTML = `
         <span style="color: #dc3545;">⚠️ ${filteredStudents.length} students will be deleted</span><br>
-        <span style="color: #dc3545;">⚠️ ${attendanceRecords.length} attendance records will be deleted</span>
+        <span style="color: #dc3545;">⚠️ ${attendanceCount} attendance records will be deleted</span>
     `;
 
     previewSection.style.display = "block";
@@ -121,7 +183,7 @@ function previewStudents() {
 /**
  * Delete selected data after confirmation
  */
-function deleteSelectedData() {
+async function deleteSelectedData() {
     const deptSelect = document.getElementById("deleteDepartment");
     const yearSelect = document.getElementById("deleteYear");
     const messageArea = document.getElementById("messageArea");
@@ -142,7 +204,7 @@ function deleteSelectedData() {
         return;
     }
 
-    loadData();
+    await loadData();
 
     // Filter students to be deleted
     const studentsToDelete = students.filter(s =>
@@ -176,37 +238,50 @@ function deleteSelectedData() {
         return;
     }
 
-    // Get student IDs to delete attendance records
-    const studentIdsToDelete = new Set(
-        studentsToDelete.map(s => String(s.id).trim().toLowerCase())
-    );
+    let deletedStudents = 0;
+    let deletedAttendance = 0;
 
-    // Count attendance records to be deleted
-    const attendanceToDelete = attendance.filter(a =>
-        studentIdsToDelete.has(String(a.id).trim().toLowerCase())
-    );
+    // Permanently delete the class from MongoDB through the backend
+    try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            messageArea.innerHTML = '<span style="color: red;">Authentication required. Please log in again.</span>';
+            return;
+        }
 
-    // Perform deletion
-    const initialStudentCount = students.length;
-    const initialAttendanceCount = attendance.length;
+        const response = await fetch(`${BASE_URL}/reports/class`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ department: selectedDept, year: selectedYear })
+        });
 
-    // Remove students
-    students = students.filter(s =>
-        !(s.department && s.department.trim().toLowerCase() === selectedDept.toLowerCase() &&
-          String(s.year).trim() === String(selectedYear))
-    );
+        const data = await response.json().catch(() => ({}));
 
-    // Remove attendance records
-    attendance = attendance.filter(a =>
-        !studentIdsToDelete.has(String(a.id).trim().toLowerCase())
-    );
+        if (!response.ok || !data.success) {
+            messageArea.innerHTML = `<span style="color: red;">❌ ${data.message || 'Failed to delete class data from the database.'}</span>`;
+            return;
+        }
 
-    // Save updated data
-    saveData();
+        deletedStudents = Number.isFinite(data.deletedStudents) ? data.deletedStudents : studentsToDelete.length;
+        deletedAttendance = Number.isFinite(data.deletedAttendance) ? data.deletedAttendance : 0;
 
-    // Calculate deleted counts
-    const deletedStudents = initialStudentCount - students.length;
-    const deletedAttendance = initialAttendanceCount - attendance.length;
+        // Keep the local cache in sync with MongoDB
+        students = students.filter(s =>
+            !(s.department && s.department.trim().toLowerCase() === selectedDept.toLowerCase() &&
+              String(s.year).trim() === String(selectedYear))
+        );
+        attendance = attendance.filter(a =>
+            !(String(a.department || "").trim().toLowerCase() === selectedDept.toLowerCase() &&
+              String(a.year || "").trim() === String(selectedYear))
+        );
+        saveData();
+    } catch (err) {
+        messageArea.innerHTML = `<span style="color: red;">❌ Network error: ${err.message}</span>`;
+        return;
+    }
 
     // Show success message
     messageArea.innerHTML = `
@@ -238,9 +313,9 @@ function goBackToAdmin() {
 /**
  * Initialize page when DOM is loaded
  */
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", async function() {
     loadAdminInfo();
-    loadData();
+    await loadData();
 });
 
 /**

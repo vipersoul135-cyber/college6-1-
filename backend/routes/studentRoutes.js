@@ -37,7 +37,6 @@ router.post('/', requireRole('admin'), upload.single('photo'), addStudent);
 router.post('/register', requireRole('admin'), addStudent);
 router.post('/batch', enforceClassScope, batchAddStudents);
 router.post('/upload', upload.single('file'), enforceClassScope, uploadExcel);
-router.put('/:id', requireRole('admin', 'staff'), enforceClassScope, updateStudent);
 router.delete('/:id', requireRole('admin','staff'), enforceClassScope, deleteStudent);
 
 module.exports = router;

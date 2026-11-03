@@ -45,6 +45,32 @@ function loadAdminInfo() {
 }
 
 /**
+ * Fetch and display total number of Pending requests on Admin dashboard
+ */
+async function loadPendingRequestsCount() {
+    try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${BASE_URL}/student-requests/pending`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const count = (data.summary && data.summary.pending !== undefined)
+                ? data.summary.pending
+                : (data.count !== undefined ? data.count : (data.requests ? data.requests.length : 0));
+
+            const badge = document.getElementById("pendingBadge");
+            if (badge) {
+                badge.textContent = `${count} Pending`;
+                badge.style.display = count > 0 ? "inline-block" : "none";
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load pending requests count:", e);
+    }
+}
+
+/**
  * Delete student data for a specified Department and Year
  */
 async function deleteClassData() {
@@ -85,7 +111,7 @@ async function deleteClassData() {
 function logout() {
     if (confirm("Are you sure you want to logout?")) {
         try {
-            fetch(`${BASE_URL}/logout`, { method: "POST" }).catch(() => {});
+            fetch(`${BASE_URL}/auth/logout`, { method: "POST" }).catch(() => {});
         } catch (e) {}
 
         localStorage.removeItem("currentUser");
@@ -99,4 +125,5 @@ function logout() {
 
 document.addEventListener("DOMContentLoaded", () => {
     loadAdminInfo();
+    loadPendingRequestsCount();
 });

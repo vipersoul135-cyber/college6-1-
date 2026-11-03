@@ -63,20 +63,11 @@ const markAttendance = async (req, res) => {
         const targetDept = (req.user.role === 'staff') ? req.user.department : (department || req.user.department);
         const targetYear = (req.user.role === 'staff' && req.user.year !== 'All') ? req.user.year : (year || '1');
 
-        // Local development logins use non-ObjectId ids (e.g. "local-cs1"),
-        // which cannot be stored in the recordedBy ObjectId field.
-        const recorderId = /^[0-9a-fA-F]{24}$/.test(String(req.user._id || '')) ? req.user._id : null;
-
         // Case A: Batch save (array of records)
         if (Array.isArray(records)) {
             const bulkOps = records.map(rec => {
                 const sId = String(rec.studentId || rec.id || '').trim().toUpperCase();
                 const sStatus = rec.status === 'absent' ? 'absent' : 'present';
-                const updateFields = {
-                    status: sStatus,
-                    studentName: rec.studentName || rec.name || ''
-                };
-                if (recorderId) updateFields.recordedBy = recorderId;
                 return {
                     updateOne: {
                         filter: {
@@ -86,7 +77,11 @@ const markAttendance = async (req, res) => {
                             year: targetYear
                         },
                         update: {
-                            $set: updateFields
+                            $set: {
+                                status: sStatus,
+                                studentName: rec.studentName || rec.name || '',
+                                recordedBy: req.user._id
+                            }
                         },
                         upsert: true
                     }
@@ -110,8 +105,6 @@ const markAttendance = async (req, res) => {
         if (studentId && status) {
             const normId = String(studentId).trim().toUpperCase();
             const normStatus = status === 'absent' ? 'absent' : 'present';
-            const updateFields = { status: normStatus };
-            if (recorderId) updateFields.recordedBy = recorderId;
 
             const record = await Attendance.findOneAndUpdate(
                 {
@@ -120,7 +113,10 @@ const markAttendance = async (req, res) => {
                     department: targetDept,
                     year: targetYear
                 },
-                updateFields,
+                {
+                    status: normStatus,
+                    recordedBy: req.user._id
+                },
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             );
 

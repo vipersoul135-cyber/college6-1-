@@ -80,6 +80,7 @@
     </div>
 
     <script>
+        const BASE_URL = 'http://localhost:5000/api';
 
         function goBack() {
             let user = null;
@@ -112,124 +113,58 @@
             }
         });
 
-        document.getElementById("uploadForm").addEventListener("submit", function (e) {
+        // Submit handler – send Excel to server
+document.getElementById("uploadForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const department = document.getElementById("department").value;
+    const year = document.getElementById("year").value;
+    const fileInput = document.getElementById("file");
+    const token = localStorage.getItem("token");
 
-            e.preventDefault();
+    if (!department || !year) {
+        document.getElementById("result").innerHTML = "<span style='color:red'>Please select Department and Year.</span>";
+        return;
+    }
+    if (!fileInput.files[0]) {
+        document.getElementById("result").innerHTML = "<span style='color:red'>Please select an Excel file.</span>";
+        return;
+    }
+    if (!token) {
+        document.getElementById("result").innerHTML = "<span style='color:red'>Not authorized. Please login again.</span>";
+        window.location.href = "index.html";
+        return;
+    }
 
-            const department = document.getElementById("department").value;
-            const year       = document.getElementById("year").value;
-            const fileInput  = document.getElementById("file");
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('department', department);
+    formData.append('year', year);
 
-            if (!department || !year) {
-                document.getElementById("result").innerHTML =
-                    "<span style='color:red'>Please select Department and Year.</span>";
-                return;
-            }
-
-            if (!fileInput.files[0]) {
-                document.getElementById("result").innerHTML =
-                    "<span style='color:red'>Please select an Excel file.</span>";
-                return;
-            }
-
-            const file   = fileInput.files[0];
-            const reader = new FileReader();
-
-            reader.onload = function (evt) {
-
-                try {
-                    // Parse the Excel workbook
-                    const data     = new Uint8Array(evt.target.result);
-                    const workbook = XLSX.read(data, { type: "array" });
-
-                    // Read first sheet
-                    const sheetName = workbook.SheetNames[0];
-                    const sheet     = workbook.Sheets[sheetName];
-                    const rows      = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-                    if (rows.length === 0) {
-                        document.getElementById("result").innerHTML =
-                            "<span style='color:red'>Excel file is empty or unreadable.</span>";
-                        return;
-                    }
-
-                    // Load existing students from localStorage
-                    let students = JSON.parse(localStorage.getItem("students")) || [];
-
-                    // Remove old students for this department+year (admin replacing data)
-                    students = students.filter(s =>
-                        !(s.department === department && s.year === year)
-                    );
-
-                    let count   = 0;
-                    let preview = "<table style='margin:10px auto;color:#fff;'><tr><th>No.</th><th>ID</th><th>Name</th></tr>";
-
-                    rows.forEach((row, index) => {
-
-                        // Get all column keys from this row
-                        const keys = Object.keys(row);
-
-                        // ID: match your exact column names first
-                        const id = String(
-                            row["reg number"]  || row["Reg Number"]  || row["REG NUMBER"]  ||
-                            row["regno"]       || row["RegNo"]       || row["Reg No"]      ||
-                            row["reg no"]      || row["register no"] || row["Register No"] ||
-                            row["studentId"]   || row["StudentId"]   || row["student id"]  ||
-                            row["id"]          || row["ID"]          ||
-                            // positional fallback: use 2nd column if nothing matched
-                            (keys[1] !== undefined ? row[keys[1]] : "") || ""
-                        ).trim();
-
-                        // Name: match your exact column names first
-                        const name = String(
-                            row["bname"]       || row["Bname"]       || row["BNAME"]       ||
-                            row["name"]        || row["Name"]        || row["NAME"]        ||
-                            row["studentName"] || row["StudentName"] || row["student name"]||
-                            row["Student"]     || row["student"]     ||
-                            // positional fallback: use 3rd column (or 2nd if only 2 cols)
-                            (keys[2] !== undefined ? row[keys[2]] : keys[1] !== undefined ? row[keys[1]] : "") || ""
-                        ).trim();
-
-                        // Serial: use your 'serial number' column if present
-                        const serialFromFile = row["serial number"] || row["Serial Number"] ||
-                                               row["S.No"] || row["sno"] || row["Sno"] || "";
-
-                        if (!id && !name) return; // skip fully empty rows
-
-                        const serial = serialFromFile ? Number(serialFromFile) : (students.length + 1);
-
-                        students.push({
-                            serial:     serial,
-                            id:         id   || ("STU" + (index + 1)),
-                            name:       name || "Unknown",
-                            department: department,
-                            year:       year
-                        });
-
-                        count++;
-                        preview += `<tr><td>${serial}</td><td>${id}</td><td>${name}</td></tr>`;
-                    });
-
-                    preview += "</table>";
-
-                    // Save back to localStorage - now staff can see these students
-                    localStorage.setItem("students", JSON.stringify(students));
-
-                    document.getElementById("result").innerHTML =
-                        `<span style="color:#86efac;font-weight:bold;">
-                            Upload Successful - ${count} students saved for 
-                            ${department}, Year ${year}
-                         </span><br>` + preview;
-
-                } catch (err) {
-                    console.error(err);
-                    document.getElementById("result").innerHTML =
-                        "<span style='color:red'>Failed to read Excel file. Please check the format.</span>";
-                }
-            };
-
-            reader.readAsArrayBuffer(file);
+    try {
+        const response = await fetch(`${BASE_URL}/students/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData,
         });
+        const result = await response.json();
+        if (result.success) {
+            document.getElementById("result").innerHTML = `<span style='color:green'>${result.message}. Students added: ${result.stats.insertedStudents}, updated: ${result.stats.updatedStudents}, attendance records: ${result.stats.insertedAttendance}</span>`;
+        } else {
+            document.getElementById("result").innerHTML = `<span style='color:red'>Error: ${result.message || 'Upload failed'}</span>`;
+        }
+    } catch (err) {
+        console.error(err);
+        document.getElementById("result").innerHTML = "<span style='color:red'>Network error while uploading.</span>";
+    }
+});
+
+
+            // NOTE: The client‑side parsing and localStorage handling for Excel uploads has been removed.
+            // The upload is now performed via a single POST to the backend endpoint `${BASE_URL}/students/upload`.
+            // The server processes the file, updates the database, and returns a summary.
+            // This simplifies the UI and ensures data persistence in MongoDB Atlas.
 
     </script>
 
